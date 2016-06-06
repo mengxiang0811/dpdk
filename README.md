@@ -9,3 +9,5 @@ API documentation, and sample application information.
 
 For questions and usage discussions, subscribe to: users@dpdk.org
 Report bugs and issues to the development mailing list: dev@dpdk.org
+
+Notice that, *for calling DPDK libraries from LuaJIT-5.1, we need to compile DPDK as shared libraries, since LuaJIT FFI library can only support shared libraries*. This can be done by setting option ``CONFIG_RTE_BUILD_SHARED_LIB=y`` in the ``config/common_base`` file.
