@@ -54,69 +54,85 @@
 /* the Lua interpreter */
 lua_State* L;
 
-static int
+	static int
 lpm_main_loop(__attribute__((unused)) void *arg)
 {
 	unsigned lcore_id;
 	lcore_id = rte_lcore_id();
 
-    lua_State *tl = lua_newthread(L);
-	lua_getglobal(tl, "lpm_lookup");
-
-    while (true) {
-        /* receive the packets */
-
-        /* push the packet/ a set of packets/IP address on top of the thread stack */
-        if (lua_pcall(tl, 0, 0, 0) != 0)
-            error(tl, "error running function `f': %s", lua_tostring(tl, -1));
-
-        /* obtain the next hop information */
-    }
-
-    return 0;
-}
-
-    int
-main(int argc, char **argv)
-{
-    int ret;
-    unsigned lcore_id;
-
-    /* initialize Lua */
-    L = luaL_newstate();
-    //lua_open();
-
-    /* load Lua base libraries */
-    luaL_openlibs(L);
-
-    /* load the script */
-    luaL_loadfile(L, "./lpm.lua");
-
-    if (lua_pcall(L, 0, 0, 0) != 0)
-        error(L, "error running function `f': %s", lua_tostring(L, -1));
-
-    /* setup the LPM table */
-    lua_getglobal(L, "lpm_setup");
-    if (lua_pcall(L, 0, 0, 0) != 0)
-        error(L, "error running function `f': %s", lua_tostring(L, -1));
-
-    ret = rte_eal_init(argc, argv);
-    if (ret < 0)
-        rte_panic("Cannot init EAL\n");
-
+	printf("lpm at lcore %d\n", lcore_id);
 #if 1
-    /* call lpm_main_loop() on every slave lcore */
-    RTE_LCORE_FOREACH_SLAVE(lcore_id) {
-        rte_eal_remote_launch(lpm_main_loop, NULL, lcore_id);
-    }
+	lua_State *tl = lua_newthread(L);
+	lua_getglobal(tl, "llpm_lookup");
+
+	if (lua_pcall(tl, 0, 0, 0) != 0)
+		error(tl, "error running function `llpm_lookup': %s", lua_tostring(tl, -1));
 #endif
 
-    /* call it on master lcore too */
-    lpm_main_loop(NULL);
+#if 0
+	while (true) {
+		/* receive the packets */
 
-    rte_eal_mp_wait_lcore();
+		/* push the packet/ a set of packets/IP address on top of the thread stack */
+		if (lua_pcall(tl, 0, 0, 0) != 0)
+			error(tl, "error running function `f': %s", lua_tostring(tl, -1));
 
-    lua_close(L);
+		/* obtain the next hop information */
+	}
+#endif
 
-    return 0;
+	return 0;
+}
+
+	int
+main(int argc, char **argv)
+{
+	int ret;
+	unsigned lcore_id;
+
+	/* initialize Lua */
+	L = luaL_newstate();
+	//lua_open();
+
+	/* load Lua base libraries */
+	luaL_openlibs(L);
+
+	ret = rte_eal_init(argc, argv);
+	if (ret < 0)
+		rte_panic("Cannot init EAL\n");
+
+#if 1
+	/* load the script */
+	luaL_loadfile(L, "./lpm.lua");
+	//luaL_loadfile(L, "./test.lua");
+	if (lua_pcall(L, 0, 0, 0) != 0)
+		error(L, "error running function `f': %s", lua_tostring(L, -1));
+
+	printf("After load the lua file!!!\n");
+	/* setup the LPM table */
+	lua_getglobal(L, "llpm_setup");
+	//lua_getglobal(L, "test");
+	if (lua_pcall(L, 0, 0, 0) != 0)
+		error(L, "error running function `test': %s", lua_tostring(L, -1));
+#endif
+
+#if 1
+	/* call lpm_main_loop() on every slave lcore */
+	RTE_LCORE_FOREACH_SLAVE(lcore_id) {
+		rte_eal_remote_launch(lpm_main_loop, NULL, lcore_id);
+	}
+#endif
+
+	/* call it on master lcore too */
+	//lpm_main_loop(NULL);
+
+	rte_eal_mp_wait_lcore();
+
+	printf("All tasks are finished!\n");
+
+	lua_close(L);
+
+	printf("Close the Lua State: L!\n");
+
+	return 0;
 }

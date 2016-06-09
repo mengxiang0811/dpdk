@@ -22,7 +22,7 @@ local function ip_check(a)
     end
 end
 
-local function to_ipv4(t)
+function to_ipv4(t)
     local ip = -1
 
     if ip_check(t[1]) and ip_check(t[2]) and ip_check(t[3]) and ip_check(t[4]) then
@@ -41,7 +41,7 @@ function M.lpm_setup()
         lrt[#lrt + 1] = {ip, len, nh}
     end
 
-    return #lrt
+    return lrt
 end
 
 function M.lookup(ip)
