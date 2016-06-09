@@ -51,12 +51,13 @@ function llpm_lookup()
     nh = llpm.lpm_entry_lookup(to_ipv4({1, 1, 1, 0}), 0)
     print("Loopup ipv4 = 1.1.1.0, next hop = " .. nh)
 
-    nh = llpm.lpm_entry_lookup(to_ipv4({1, 1, 1, 2}), 0)
-    print("Loopup ipv4 = 1.1.1.2, next hop = " .. nh)
+    nh = llpm.lpm_entry_lookup(to_ipv4({4, 1, 1, 2}), 0)
+    print("Loopup ipv4 = 4.1.1.2, next hop = " .. nh)
 
-    nh = llpm.lpm_entry_lookup(to_ipv4({1, 1, 1, 255}), 0)
-    print("Loopup ipv4 = 1.1.1.255, next hop = " .. nh)
+    nh = llpm.lpm_entry_lookup(to_ipv4({8, 1, 1, 255}), 0)
+    print("Loopup ipv4 = 8.1.1.255, next hop = " .. nh)
 
+--[[
     nh = llpm.lpm_entry_lookup(to_ipv4({1, 1, 1, 256}), 0)
     print("Loopup ipv4 = 1.1.1.256, next hop = " .. nh)
 
@@ -71,4 +72,5 @@ function llpm_lookup()
 
     nh = llpm.lpm_entry_lookup(to_ipv4({8, 1, 1, 256}), 0)
     print("Loopup ipv4 = 8.1.1.256, next hop = " .. nh)
+--]]
 end

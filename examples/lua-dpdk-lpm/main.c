@@ -124,7 +124,7 @@ main(int argc, char **argv)
 #endif
 
 	/* call it on master lcore too */
-	//lpm_main_loop(NULL);
+	lpm_main_loop(NULL);
 
 	rte_eal_mp_wait_lcore();
 
