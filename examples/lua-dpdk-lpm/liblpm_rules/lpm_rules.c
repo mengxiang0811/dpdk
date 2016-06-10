@@ -58,7 +58,7 @@
 
 #include "lpm_rules.h"
 
-struct rte_lpm *ipv4_l3fwd_lpm_lookup_struct[NB_SOCKETS];
+static struct rte_lpm *ipv4_l3fwd_lpm_lookup_struct[NB_SOCKETS];
 
 int lpm_table_init(int socketid) {
 	char s[64];
@@ -106,4 +106,8 @@ int lpm_entry_lookup(unsigned int ip, int socketid) {
 	return (uint8_t) ((rte_lpm_lookup(ipv4_l3fwd_lpm_lookup_struct[socketid],
 		ip,
 		&next_hop) == 0) ? next_hop : 255);
+}
+
+int get_lcore() {
+	return rte_lcore_id();
 }

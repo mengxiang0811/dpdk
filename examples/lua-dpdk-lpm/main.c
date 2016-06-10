@@ -61,12 +61,28 @@ lpm_main_loop(__attribute__((unused)) void *arg)
 	lcore_id = rte_lcore_id();
 
 	printf("lpm at lcore %d\n", lcore_id);
-#if 1
+
+#if 0
 	lua_State *tl = lua_newthread(L);
 	lua_getglobal(tl, "llpm_lookup");
 
 	if (lua_pcall(tl, 0, 0, 0) != 0)
 		error(tl, "error running function `llpm_lookup': %s", lua_tostring(tl, -1));
+
+#endif
+
+#if 1
+	int loop = 5;
+	lua_State *tl = lua_newthread(L);
+
+	lua_checkstack(tl, 20);
+
+	while (loop-- > 0) {
+		lua_getglobal(tl, "llpm_lookup");
+
+		if (lua_pcall(tl, 0, 0, 0) != 0)
+			error(tl, "error running function `llpm_lookup': %s", lua_tostring(tl, -1));
+	}
 #endif
 
 #if 0
@@ -89,6 +105,7 @@ main(int argc, char **argv)
 {
 	int ret;
 	unsigned lcore_id;
+	int i = 0;
 
 	/* initialize Lua */
 	L = luaL_newstate();
@@ -106,14 +123,14 @@ main(int argc, char **argv)
 	luaL_loadfile(L, "./lpm.lua");
 	//luaL_loadfile(L, "./test.lua");
 	if (lua_pcall(L, 0, 0, 0) != 0)
-		error(L, "error running function `f': %s", lua_tostring(L, -1));
+		error(L, "error running function `lpm.lua': %s", lua_tostring(L, -1));
 
 	printf("After load the lua file!!!\n");
 	/* setup the LPM table */
 	lua_getglobal(L, "llpm_setup");
 	//lua_getglobal(L, "test");
 	if (lua_pcall(L, 0, 0, 0) != 0)
-		error(L, "error running function `test': %s", lua_tostring(L, -1));
+		error(L, "error running function `llpm_setup': %s", lua_tostring(L, -1));
 #endif
 
 #if 1

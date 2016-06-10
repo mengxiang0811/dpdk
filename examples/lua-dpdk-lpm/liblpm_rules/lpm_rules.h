@@ -8,5 +8,5 @@
 int lpm_table_init(int socket_id);
 int lpm_entry_add(unsigned int ip, int depth, int next_hop, int socketid);
 int lpm_entry_lookup(unsigned int ip, int socketid);
-
+int get_lcore();
 #endif

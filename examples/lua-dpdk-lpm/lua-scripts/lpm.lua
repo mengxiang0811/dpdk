@@ -15,6 +15,9 @@ ffi.cdef[[
 int lpm_table_init(int socket_id);
 int lpm_entry_add(unsigned int ip, int depth, int next_hop, int socketid);
 int lpm_entry_lookup(unsigned int ip, int socketid);
+int get_lcore();
+int poll(struct pollfd *fds, unsigned long nfds, int timeout);
+int printf(const char *fmt, ...);
 ]]
 
 function lpm_table_init(socketid)
@@ -47,15 +50,48 @@ function llpm_setup()
     print("\ttotal number of entries is: ".. #lrt)
 end
 
+local function sleep(s)
+	ffi.C.poll(nil, 0, s * 1000)
+end
+
 function llpm_lookup()
-    nh = llpm.lpm_entry_lookup(to_ipv4({1, 1, 1, 0}), 0)
-    print("Loopup ipv4 = 1.1.1.0, next hop = " .. nh)
 
+    local nh = 0
+    local lc = llpm.get_lcore()
+
+    sleep(math.random(1, 3))
+    nh = llpm.lpm_entry_lookup(to_ipv4({2, 1, 1, 0}), 0)
+
+    if nh ~= 1 then 
+    	print("Error nh!!!")
+    end
+    ffi.C.printf("---lcore %g Loopup ipv4 = 2.1.1.0, next hop = %g\n\n", lc, nh)
+    --print("+++end lcore " .. lc)
+
+    sleep(math.random(1, 3))
     nh = llpm.lpm_entry_lookup(to_ipv4({4, 1, 1, 2}), 0)
-    print("Loopup ipv4 = 4.1.1.2, next hop = " .. nh)
+    if nh ~= 3 then 
+    	print("Error nh!!!")
+    end
+    ffi.C.printf("---lcore %g Loopup ipv4 = 4.1.1.2, next hop = %g\n\n", lc, nh)
+    --print("---lcore " .. lc .. " Loopup ipv4 = 4.1.1.2, next hop = " .. nh)
+    --print("+++end lcore " .. lc)
 
+    sleep(math.random(1, 3))
+    nh = llpm.lpm_entry_lookup(to_ipv4({6, 1, 1, 2}), 0)
+    if nh ~= 5 then 
+    	print("Error nh!!!")
+    end
+    ffi.C.printf("---lcore %g Loopup ipv4 = 6.1.1.2, next hop = %g\n\n", lc, nh)
+    
+    sleep(math.random(1, 3))
     nh = llpm.lpm_entry_lookup(to_ipv4({8, 1, 1, 255}), 0)
-    print("Loopup ipv4 = 8.1.1.255, next hop = " .. nh)
+    if nh ~= 7 then 
+    	print("Error nh!!!")
+    end
+    ffi.C.printf("---lcore %g Loopup ipv4 = 8.1.1.255, next hop = %g\n\n", lc, nh)
+    --print("---lcore " .. lc .. " Loopup ipv4 = 8.1.1.255, next hop = " .. nh)
+    --print("+++end lcore " .. lc)
 
 --[[
     nh = llpm.lpm_entry_lookup(to_ipv4({1, 1, 1, 256}), 0)
