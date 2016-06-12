@@ -1,0 +1,1 @@
+cmd_liblpm_rules.so = gcc -Wl,--no-as-needed -Wl,-export-dynamic -L/home/vagrant/ddos/dpdk/examples/lua-first-policy/liblpm_rules/build/lib -L/home/vagrant/ddos/dpdk/x86_64-native-linuxapp-gcc/lib   -shared -o liblpm_rules.so lpm_rules.o -Wl,-lrte_eal -Wl,-lrte_lpm 

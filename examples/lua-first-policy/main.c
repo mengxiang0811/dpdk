@@ -47,10 +47,15 @@
 #include <rte_per_lcore.h>
 #include <rte_lcore.h>
 #include <rte_debug.h>
+#include <rte_ether.h>
+#include <rte_ip.h>
 
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
+
+//#define DEBUG
+#define SIMMOD
 
 #define RX_RING_SIZE 128
 #define TX_RING_SIZE 512
@@ -59,14 +64,63 @@
 #define MBUF_CACHE_SIZE 250
 #define BURST_SIZE 32
 
+
+#define IP_VERSION 0x40                                                         
+#define IP_HDRLEN  0x05 /* default IP header length == five 32-bits words. */   
+#define IP_DEFTTL  64   /* from RFC 1340. */                                    
+#define IP_VHL_DEF (IP_VERSION | IP_HDRLEN)                                     
+#define IP_DN_FRAGMENT_FLAG 0x0040
+
 static const struct rte_eth_conf port_conf_default = {
 	.rxmode = { .max_rx_pkt_len = ETHER_MAX_LEN, },
 };
 
 static unsigned nb_ports;
+struct rte_mempool *mbuf_pool;
 
 /* the Lua interpreter */
 lua_State* L;
+
+/* simulation test */
+
+static struct ipv4_hdr ip_hdr_template[1];
+static struct ether_hdr l2_hdr_template[1];
+
+	void
+init_hdr_templates(void)
+{
+	memset(ip_hdr_template, 0, sizeof(ip_hdr_template));
+	memset(l2_hdr_template, 0, sizeof(l2_hdr_template));
+
+	ip_hdr_template[0].version_ihl = IP_VHL_DEF;
+	ip_hdr_template[0].type_of_service = (2 << 2); // default DSCP 2 
+	ip_hdr_template[0].total_length = 0; 
+	ip_hdr_template[0].packet_id = 0;
+	ip_hdr_template[0].fragment_offset = IP_DN_FRAGMENT_FLAG;
+	ip_hdr_template[0].time_to_live = IP_DEFTTL;
+	ip_hdr_template[0].next_proto_id = IPPROTO_IP;
+	ip_hdr_template[0].hdr_checksum = 0;
+	ip_hdr_template[0].src_addr = rte_cpu_to_be_32(0x00000000);
+	ip_hdr_template[0].dst_addr = rte_cpu_to_be_32(0x07010101);
+
+	l2_hdr_template[0].d_addr.addr_bytes[0] = 0x0a;
+	l2_hdr_template[0].d_addr.addr_bytes[1] = 0x00;
+	l2_hdr_template[0].d_addr.addr_bytes[2] = 0x27;
+	l2_hdr_template[0].d_addr.addr_bytes[3] = 0x00;
+	l2_hdr_template[0].d_addr.addr_bytes[4] = 0x00;
+	l2_hdr_template[0].d_addr.addr_bytes[5] = 0x01;
+
+	l2_hdr_template[0].s_addr.addr_bytes[0] = 0x08;
+	l2_hdr_template[0].s_addr.addr_bytes[1] = 0x00;
+	l2_hdr_template[0].s_addr.addr_bytes[2] = 0x27;
+	l2_hdr_template[0].s_addr.addr_bytes[3] = 0x7d;
+	l2_hdr_template[0].s_addr.addr_bytes[4] = 0xc7;
+	l2_hdr_template[0].s_addr.addr_bytes[5] = 0x68;
+
+	l2_hdr_template[0].ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
+
+	return;
+}
 
 /*
  * Initialises a given port using global settings and with the rx buffers
@@ -123,6 +177,9 @@ port_init(uint8_t port, struct rte_mempool *mbuf_pool)
 	static int
 lpm_main_loop(__attribute__((unused)) void *arg)
 {
+	lua_State *tl = lua_newthread(L);
+
+#ifndef SIMMOD
 	uint8_t port;
 
 	for (port = 0; port < nb_ports; port++)
@@ -136,9 +193,7 @@ lpm_main_loop(__attribute__((unused)) void *arg)
 	printf("\nCore %u forwarding packets with LPM. [Ctrl+C to quit]\n",
 			rte_lcore_id());
 
-	lua_State *tl = lua_newthread(L);
-	
-    for (;;) {
+	for (;;) {
 		for (port = 0; port < nb_ports; port++) {
 			struct rte_mbuf *bufs[BURST_SIZE];
 			const uint16_t nb_rx = rte_eth_rx_burst(port, 0,
@@ -154,59 +209,106 @@ lpm_main_loop(__attribute__((unused)) void *arg)
 				unsigned int len = rte_pktmbuf_data_len(mbuf);
 				rte_pktmbuf_dump(stdout, mbuf, len);
 
-				printf("\t\t\t***************PKT LOOKUP**************\n");
-                lua_checkstack(tl, 20);
+				printf("***************PKT LOOKUP**************\n");
+				lua_checkstack(tl, 20);
 
-                /* push functions and arguments */
-                lua_getglobal(tl, "llpm_get_dst_port"); /* function to be called */
-                lua_pushlightuserdata(tl, mbuf);   /* push 1st argument */
-                //lua_pushinteger(tl, 0);   /* push 2nd argument */
+				/* push functions and arguments */
+				lua_getglobal(tl, "llpm_get_dst_port"); /* function to be called */
+				lua_pushlightuserdata(tl, mbuf);   /* push 1st argument */
+				//lua_pushinteger(tl, 0);   /* push 2nd argument */
 
-                if (lua_pcall(tl, 1, 1, 0) != 0)
-                    error(tl, "error running function `llpm_get_dst_port': %s", lua_tostring(tl, -1));
+				if (lua_pcall(tl, 1, 1, 0) != 0)
+					error(tl, "error running function `llpm_get_dst_port': %s", lua_tostring(tl, -1));
 
-                /* retrieve result */
-                int nexthop = 0;
-                nexthop = lua_tointeger(tl, -1);
-                lua_pop(tl, 1);  /* pop returned value */
+				/* retrieve result */
+				int nexthop = 0;
+				nexthop = lua_tointeger(tl, -1);
+				lua_pop(tl, 1);  /* pop returned value */
 
-                printf("\t\t\t#######The next hop is %d\n", nexthop);
+				printf("\t\t\t#######The next hop is %d\n", nexthop);
 
-                /*release the packet*/
-                rte_pktmbuf_free(mbuf);
-            }
-        }
-    }
+				/*release the packet*/
+				rte_pktmbuf_free(mbuf);
+			}
+		}
+	}
+#else
+	int loop = 10;
 
-    return 0;
+	while (loop-- > 0) {
+		struct rte_mbuf *mbuf = rte_pktmbuf_alloc(mbuf_pool);
+#ifdef DEBUG
+		printf("*******************Construct PKT*******************\n");
+#endif
+		mbuf->packet_type |= RTE_PTYPE_L3_IPV4;
+		struct ether_hdr *pneth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr));
+		//struct ether_hdr *pneth = rte_pktmbuf_mtod(&mbuf, struct ether_hdr *);
+		struct ipv4_hdr *ip = (struct ipv4_hdr *) &pneth[1];
+
+		pneth = rte_memcpy(pneth, &l2_hdr_template[0],
+				sizeof(struct ether_hdr));
+
+		ip = rte_memcpy(ip, &ip_hdr_template[0],
+				sizeof(struct ipv4_hdr));
+
+		unsigned int new_ip_addr = 0;
+
+		new_ip_addr += loop * (1 << 24) + (1 << 16) + (1 << 8) + loop;
+
+		ip->dst_addr = rte_cpu_to_be_32(new_ip_addr);
+ 
+#ifdef DEBUG
+		unsigned int len = rte_pktmbuf_data_len(mbuf);
+		rte_pktmbuf_dump(stdout, mbuf, len);
+
+		printf("***************PKT LOOKUP**************\n");
+#endif
+		lua_checkstack(tl, 20);
+
+		/* push functions and arguments */
+		lua_getglobal(tl, "llpm_get_dst_port"); /* function to be called */
+		lua_pushlightuserdata(tl, (void *)mbuf);   /* push 1st argument */
+		//lua_pushinteger(tl, 0);   /* push 2nd argument */
+
+		if (lua_pcall(tl, 1, 1, 0) != 0)
+			error(tl, "error running function `llpm_get_dst_port': %s", lua_tostring(tl, -1));
+
+		/* retrieve result */
+		int nexthop = 0;
+		nexthop = lua_tointeger(tl, -1);
+		lua_pop(tl, 1);  /* pop returned value */
+
+		printf("LCORE %d#######The next hop is %d for %d.1.1.%d\n", rte_lcore_id(), nexthop, loop, loop);
+
+		rte_pktmbuf_free(mbuf);
+
+		sleep(rand()%10);
+	}
+
+#endif
+	return 0;
 }
 
-    int
+	int
 main(int argc, char **argv)
 {
-    int ret;
-    unsigned lcore_id;
-    int i = 0;
+	int ret;
+	unsigned lcore_id;
+	int i = 0;
 
-	struct rte_mempool *mbuf_pool;
 	uint8_t portid;
 
-    /* initialize Lua */
-    L = luaL_newstate();
-    //lua_open();
-
-    /* load Lua base libraries */
-    luaL_openlibs(L);
-
+	init_hdr_templates();
 	/* init EAL */
-    ret = rte_eal_init(argc, argv);
-    if (ret < 0)
-        rte_panic("Cannot init EAL\n");
-
+	ret = rte_eal_init(argc, argv);
+	if (ret < 0)
+		rte_panic("Cannot init EAL\n");
+#ifndef SIMMOD
 	argc -= ret;
 	argv += ret;
 
 	nb_ports = rte_eth_dev_count();
+	printf("There are %d ports!\n", nb_ports);
 	if (nb_ports < 2 || (nb_ports & 1))
 		rte_exit(EXIT_FAILURE, "Error: number of ports must be even\n");
 
@@ -225,39 +327,54 @@ main(int argc, char **argv)
 	if (rte_lcore_count() > 1)
 		printf("\nWARNING: Too much enabled lcores - "
 				"App uses only 1 lcore\n");
+#else
+	srand(time(NULL));
+	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL",
+			NUM_MBUFS * 2, MBUF_CACHE_SIZE, 0,
+			RTE_MBUF_DEFAULT_BUF_SIZE, 0);
+	if (mbuf_pool == NULL)
+		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
+
+#endif
+	/* initialize Lua */
+	L = luaL_newstate();
+	//lua_open();
+
+	/* load Lua base libraries */
+	luaL_openlibs(L);
 
 #if 1
-    /* load the script */
-    luaL_loadfile(L, "./lpm.lua");
-    //luaL_loadfile(L, "./test.lua");
-    if (lua_pcall(L, 0, 0, 0) != 0)
-        error(L, "error running function `lpm.lua': %s", lua_tostring(L, -1));
+	/* load the script */
+	luaL_loadfile(L, "./lpm.lua");
+	//luaL_loadfile(L, "./test.lua");
+	if (lua_pcall(L, 0, 0, 0) != 0)
+		error(L, "error running function `lpm.lua': %s", lua_tostring(L, -1));
 
-    printf("After load the lua file!!!\n");
-    /* setup the LPM table */
-    lua_getglobal(L, "llpm_setup");
-    //lua_getglobal(L, "test");
-    if (lua_pcall(L, 0, 0, 0) != 0)
-        error(L, "error running function `llpm_setup': %s", lua_tostring(L, -1));
+	printf("After load the lua file!!!\n");
+	/* setup the LPM table */
+	lua_getglobal(L, "llpm_setup");
+	//lua_getglobal(L, "test");
+	if (lua_pcall(L, 0, 0, 0) != 0)
+		error(L, "error running function `llpm_setup': %s", lua_tostring(L, -1));
 #endif
 
-#if 0
-    /* call lpm_main_loop() on every slave lcore */
-    RTE_LCORE_FOREACH_SLAVE(lcore_id) {
-        rte_eal_remote_launch(lpm_main_loop, NULL, lcore_id);
-    }
+#if 1
+	/* call lpm_main_loop() on every slave lcore */
+	RTE_LCORE_FOREACH_SLAVE(lcore_id) {
+		rte_eal_remote_launch(lpm_main_loop, NULL, lcore_id);
+	}
 #endif
 
-    /* call it on master lcore too */
-    lpm_main_loop(NULL);
+	/* call it on master lcore too */
+	lpm_main_loop(NULL);
 
-    rte_eal_mp_wait_lcore();
+	rte_eal_mp_wait_lcore();
 
-    printf("All tasks are finished!\n");
+	printf("All tasks are finished!\n");
 
-    lua_close(L);
+	lua_close(L);
 
-    printf("Close the Lua State: L!\n");
+	printf("Close the Lua State: L!\n");
 
-    return 0;
+	return 0;
 }

@@ -34,6 +34,8 @@ $(error "Please define RTE_SDK environment variable")
 endif
 
 # Default target, can be overriden by command line or environment
+RTE_SDK = /home/vagrant/ddos/dpdk
+#RTE_SDK = /home/vagrant/dpdk
 RTE_TARGET ?= x86_64-native-linuxapp-gcc
 
 include $(RTE_SDK)/mk/rte.vars.mk
@@ -44,10 +46,12 @@ APP = lpm
 # all source are stored in SRCS-y
 SRCS-y := main.c
 
-INCDIR += -I/home/developer/lua/lua-5.1.5/include
+#INCDIR += -I/home/developer/lua/lua-5.1.5/include
+INCDIR += -I/home/vagrant/ddos/lua-5.1.5/include
 #LDIR += -L/home/developer/lua/lua-5.1.5/lib
 #LDLIBS += $(LDIR) -lm -llua
-LDLIBS += $(LDIR) -lm -lluajit-5.1
+#LDLIBS += $(LDIR) -lm -lluajit-5.1
+LDLIBS += -lm -lluajit-5.1
 CFLAGS += -O3
 #CFLAGS += $(WERROR_FLAGS) $(INCDIR)
 CFLAGS += $(INCDIR)
