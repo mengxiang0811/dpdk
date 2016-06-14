@@ -107,10 +107,6 @@ int lpm_entry_lookup(unsigned int ip, int socketid) {
 		&next_hop) == 0) ? next_hop : 255);
 }
 
-int get_lcore() {
-	return rte_lcore_id();
-}
-
 int lpm_get_dst_port(struct rte_mbuf *m, int socketid) {
     struct ether_hdr *eth_hdr;
     struct ipv4_hdr *ipv4_hdr;
@@ -127,3 +123,8 @@ int lpm_get_dst_port(struct rte_mbuf *m, int socketid) {
 
     return -1;
 }
+
+int get_lcore() {
+	return rte_lcore_id();
+}
+
