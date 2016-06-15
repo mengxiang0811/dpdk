@@ -58,9 +58,9 @@ lpm_get_ipv6_dst_port(void *ipv6_hdr,  uint8_t portid, void *lookup_struct)
 			&next_hop) == 0) ?  next_hop : portid);
 }
 
-static inline __attribute__((always_inline)) void
-l3fwd_lpm_simple_forward(struct rte_mbuf *m, uint8_t portid,
-		struct lcore_conf *qconf)
+static inline __attribute__((always_inline)) uint16_t
+lpm_simple_lookup(struct rte_mbuf *m, uint8_t portid,
+		const int socketid)
 {
 	struct ether_hdr *eth_hdr;
 	struct ipv4_hdr *ipv4_hdr;
@@ -81,24 +81,12 @@ l3fwd_lpm_simple_forward(struct rte_mbuf *m, uint8_t portid,
 		}
 #endif
 		 dst_port = lpm_get_ipv4_dst_port(ipv4_hdr, portid,
-						qconf->ipv4_lookup_struct);
+						ipv4_grantor_lpm_lookup_struct[socketid]);
 
-		if (dst_port >= RTE_MAX_ETHPORTS ||
-			(enabled_port_mask & 1 << dst_port) == 0)
+         /* TODO: add port mask */
+		if (dst_port >= RTE_MAX_ETHPORTS)
 			dst_port = portid;
 
-#ifdef DO_RFC_1812_CHECKS
-		/* Update time to live and header checksum */
-		--(ipv4_hdr->time_to_live);
-		++(ipv4_hdr->hdr_checksum);
-#endif
-		/* dst addr */
-		*(uint64_t *)&eth_hdr->d_addr = dest_eth_addr[dst_port];
-
-		/* src addr */
-		ether_addr_copy(&ports_eth_addr[dst_port], &eth_hdr->s_addr);
-
-		send_single_packet(qconf, m, dst_port);
 	} else if (RTE_ETH_IS_IPV6_HDR(m->packet_type)) {
 		/* Handle IPv6 headers.*/
 		struct ipv6_hdr *ipv6_hdr;
@@ -107,28 +95,23 @@ l3fwd_lpm_simple_forward(struct rte_mbuf *m, uint8_t portid,
 						   sizeof(struct ether_hdr));
 
 		dst_port = lpm_get_ipv6_dst_port(ipv6_hdr, portid,
-					qconf->ipv6_lookup_struct);
+					ipv6_grantor_lpm_lookup_struct[socketid]);
 
-		if (dst_port >= RTE_MAX_ETHPORTS ||
-			(enabled_port_mask & 1 << dst_port) == 0)
+         /* TODO: add port mask */
+		if (dst_port >= RTE_MAX_ETHPORTS)
 			dst_port = portid;
 
-		/* dst addr */
-		*(uint64_t *)&eth_hdr->d_addr = dest_eth_addr[dst_port];
-
-		/* src addr */
-		ether_addr_copy(&ports_eth_addr[dst_port], &eth_hdr->s_addr);
-
-		send_single_packet(qconf, m, dst_port);
 	} else {
 		/* Free the mbuf that contains non-IPV4/IPV6 packet */
 		rte_pktmbuf_free(m);
 	}
+
+    return dst_port;
 }
 
 static inline void
-l3fwd_lpm_no_opt_send_packets(int nb_rx, struct rte_mbuf **pkts_burst,
-				uint8_t portid, struct lcore_conf *qconf)
+lpm_no_opt_lookup_packets(int nb_rx, struct rte_mbuf **pkts_burst,
+				uint8_t portid, uint16_t *dst_port, const int socketid)
 {
 	int32_t j;
 
@@ -140,12 +123,12 @@ l3fwd_lpm_no_opt_send_packets(int nb_rx, struct rte_mbuf **pkts_burst,
 	for (j = 0; j < (nb_rx - PREFETCH_OFFSET); j++) {
 		rte_prefetch0(rte_pktmbuf_mtod(pkts_burst[
 				j + PREFETCH_OFFSET], void *));
-		l3fwd_lpm_simple_forward(pkts_burst[j], portid, qconf);
+		dst_port[j] = lpm_simple_lookup(pkts_burst[j], portid, socketid);
 	}
 
-	/* Forward remaining prefetched packets */
+	/* Lookup remaining prefetched packets */
 	for (; j < nb_rx; j++)
-		l3fwd_lpm_simple_forward(pkts_burst[j], portid, qconf);
+		dst_port[j] = lpm_simple_lookup(pkts_burst[j], portid, socketid);
 }
 
 #endif /* __L3FWD_LPM_H__ */

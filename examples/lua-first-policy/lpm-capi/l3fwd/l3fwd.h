@@ -38,7 +38,7 @@
 
 #define DO_RFC_1812_CHECKS
 
-#define RTE_LOGTYPE_L3FWD RTE_LOGTYPE_USER1
+#define RTE_LOGTYPE_GRANTOR RTE_LOGTYPE_USER1
 
 #define MAX_PKT_BURST     32
 #define BURST_TX_DRAIN_US 100 /* TX drain every ~100us */
@@ -145,14 +145,10 @@ int
 lpm_lookup(int nb_rx, struct rte_mbuf **pkts_burst, 
         uint8_t portid, uint16_t *dst_port, const int socketid);
 
-int
-lpm_lookupx4(int nb_rx, struct rte_mbuf **pkts_burst, 
-        uint8_t portid, uint16_t *dst_port, const int socketid);
+void *
+lpm_get_ipv4_grantor_lookup_struct(const int socketid);
 
 void *
-lpm_get_ipv4_l3fwd_lookup_struct(const int socketid);
-
-void *
-lpm_get_ipv6_l3fwd_lookup_struct(const int socketid);
+lpm_get_ipv6_grantor_lookup_struct(const int socketid);
 
 #endif  /* __L3_FWD_H__ */

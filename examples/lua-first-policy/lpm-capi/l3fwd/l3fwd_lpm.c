@@ -61,19 +61,19 @@
 //#define SIMMOD
 
 #ifdef SIMMOD
-struct ipv4_l3fwd_lpm_route {
+struct ipv4_grantor_lpm_route {
 	uint32_t ip;
 	uint8_t  depth;
 	uint8_t  if_out;
 };
 
-struct ipv6_l3fwd_lpm_route {
+struct ipv6_grantor_lpm_route {
 	uint8_t ip[16];
 	uint8_t  depth;
 	uint8_t  if_out;
 };
 
-static struct ipv4_l3fwd_lpm_route ipv4_l3fwd_lpm_route_array[] = {
+static struct ipv4_grantor_lpm_route ipv4_grantor_lpm_route_array[] = {
 	{IPv4(1, 1, 1, 0), 24, 0},
 	{IPv4(2, 1, 1, 0), 24, 1},
 	{IPv4(3, 1, 1, 0), 24, 2},
@@ -84,7 +84,7 @@ static struct ipv4_l3fwd_lpm_route ipv4_l3fwd_lpm_route_array[] = {
 	{IPv4(8, 1, 1, 0), 24, 7},
 };
 
-static struct ipv6_l3fwd_lpm_route ipv6_l3fwd_lpm_route_array[] = {
+static struct ipv6_grantor_lpm_route ipv6_grantor_lpm_route_array[] = {
 	{{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, 48, 0},
 	{{2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, 48, 1},
 	{{3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, 48, 2},
@@ -95,20 +95,20 @@ static struct ipv6_l3fwd_lpm_route ipv6_l3fwd_lpm_route_array[] = {
 	{{8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, 48, 7},
 };
 
-#define IPV4_L3FWD_LPM_NUM_ROUTES \
-	(sizeof(ipv4_l3fwd_lpm_route_array) / sizeof(ipv4_l3fwd_lpm_route_array[0]))
-#define IPV6_L3FWD_LPM_NUM_ROUTES \
-	(sizeof(ipv6_l3fwd_lpm_route_array) / sizeof(ipv6_l3fwd_lpm_route_array[0]))
+#define IPV4_GRANTOR_LPM_NUM_ROUTES \
+	(sizeof(ipv4_grantor_lpm_route_array) / sizeof(ipv4_grantor_lpm_route_array[0]))
+#define IPV6_GRANTOR_LPM_NUM_ROUTES \
+	(sizeof(ipv6_grantor_lpm_route_array) / sizeof(ipv6_grantor_lpm_route_array[0]))
 
 #endif /* SIMMOD: for simulation purpose */
 
-#define IPV4_L3FWD_LPM_MAX_RULES         1024
-#define IPV4_L3FWD_LPM_NUMBER_TBL8S (1 << 8)
-#define IPV6_L3FWD_LPM_MAX_RULES         1024
-#define IPV6_L3FWD_LPM_NUMBER_TBL8S (1 << 16)
+#define IPV4_GRANTOR_LPM_MAX_RULES         1024
+#define IPV4_GRANTOR_LPM_NUMBER_TBL8S (1 << 8)
+#define IPV6_GRANTOR_LPM_MAX_RULES         1024
+#define IPV6_GRANTOR_LPM_NUMBER_TBL8S (1 << 16)
 
-struct rte_lpm *ipv4_l3fwd_lpm_lookup_struct[NB_SOCKETS];
-struct rte_lpm6 *ipv6_l3fwd_lpm_lookup_struct[NB_SOCKETS];
+struct rte_lpm *ipv4_grantor_lpm_lookup_struct[NB_SOCKETS];
+struct rte_lpm6 *ipv6_grantor_lpm_lookup_struct[NB_SOCKETS];
 
 #if defined(__SSE4_1__)
 #include "l3fwd_lpm_sse.h"
@@ -202,7 +202,6 @@ lpm_main_loop(__attribute__((unused)) void *dummy)
 /*
  * TODO: check the packet types that the port supports and callback functions register
  *
- * the mode for ipv4/ipv6 on/off
  * lpm_check_ptype
  */
 
@@ -260,85 +259,87 @@ lpm_setup(const int mode, const int socketid)
     int ret;
     char s[64];
 
+    /* TODO: the mode for ipv4/ipv6 on/off */
+
     /* create the LPM table */
-    config_ipv4.max_rules = IPV4_L3FWD_LPM_MAX_RULES;
-    config_ipv4.number_tbl8s = IPV4_L3FWD_LPM_NUMBER_TBL8S;
+    config_ipv4.max_rules = IPV4_GRANTOR_LPM_MAX_RULES;
+    config_ipv4.number_tbl8s = IPV4_GRANTOR_LPM_NUMBER_TBL8S;
     config_ipv4.flags = 0;
-    snprintf(s, sizeof(s), "IPV4_L3FWD_LPM_%d", socketid);
-    ipv4_l3fwd_lpm_lookup_struct[socketid] =
+    snprintf(s, sizeof(s), "IPV4_GRANTOR_LPM_%d", socketid);
+    ipv4_grantor_lpm_lookup_struct[socketid] =
         rte_lpm_create(s, socketid, &config_ipv4);
-    if (ipv4_l3fwd_lpm_lookup_struct[socketid] == NULL)
+    if (ipv4_grantor_lpm_lookup_struct[socketid] == NULL)
         rte_exit(EXIT_FAILURE,
-                "Unable to create the l3fwd LPM table on socket %d\n",
+                "Unable to create the Grantor LPM table on socket %d\n",
                 socketid);
 
 #ifdef SIMMOD
 
     /* populate the LPM table */
-    for (i = 0; i < IPV4_L3FWD_LPM_NUM_ROUTES; i++) {
+    for (i = 0; i < IPV4_GRANTOR_LPM_NUM_ROUTES; i++) {
 
         /* skip unused ports */
-        if ((1 << ipv4_l3fwd_lpm_route_array[i].if_out &
+        if ((1 << ipv4_grantor_lpm_route_array[i].if_out &
                     enabled_port_mask) == 0)
             continue;
 
-        ret = rte_lpm_add(ipv4_l3fwd_lpm_lookup_struct[socketid],
-                ipv4_l3fwd_lpm_route_array[i].ip,
-                ipv4_l3fwd_lpm_route_array[i].depth,
-                ipv4_l3fwd_lpm_route_array[i].if_out);
+        ret = rte_lpm_add(ipv4_grantor_lpm_lookup_struct[socketid],
+                ipv4_grantor_lpm_route_array[i].ip,
+                ipv4_grantor_lpm_route_array[i].depth,
+                ipv4_grantor_lpm_route_array[i].if_out);
 
         if (ret < 0) {
             rte_exit(EXIT_FAILURE,
-                    "Unable to add entry %u to the l3fwd LPM table on socket %d\n",
+                    "Unable to add entry %u to the Grantor LPM table on socket %d\n",
                     i, socketid);
         }
 
         printf("LPM: Adding route 0x%08x / %d (%d)\n",
-                (unsigned)ipv4_l3fwd_lpm_route_array[i].ip,
-                ipv4_l3fwd_lpm_route_array[i].depth,
-                ipv4_l3fwd_lpm_route_array[i].if_out);
+                (unsigned)ipv4_grantor_lpm_route_array[i].ip,
+                ipv4_grantor_lpm_route_array[i].depth,
+                ipv4_grantor_lpm_route_array[i].if_out);
     }
 
 #endif /* SIMMOD */
 
     /* create the LPM6 table */
-    snprintf(s, sizeof(s), "IPV6_L3FWD_LPM_%d", socketid);
+    snprintf(s, sizeof(s), "IPV6_GRANTOR_LPM_%d", socketid);
 
-    config.max_rules = IPV6_L3FWD_LPM_MAX_RULES;
-    config.number_tbl8s = IPV6_L3FWD_LPM_NUMBER_TBL8S;
+    config.max_rules = IPV6_GRANTOR_LPM_MAX_RULES;
+    config.number_tbl8s = IPV6_GRANTOR_LPM_NUMBER_TBL8S;
     config.flags = 0;
-    ipv6_l3fwd_lpm_lookup_struct[socketid] = rte_lpm6_create(s, socketid,
+    ipv6_grantor_lpm_lookup_struct[socketid] = rte_lpm6_create(s, socketid,
             &config);
-    if (ipv6_l3fwd_lpm_lookup_struct[socketid] == NULL)
+    if (ipv6_grantor_lpm_lookup_struct[socketid] == NULL)
         rte_exit(EXIT_FAILURE,
-                "Unable to create the l3fwd LPM table on socket %d\n",
+                "Unable to create the Grantor LPM table on socket %d\n",
                 socketid);
 
 #ifdef SIMMOD
 
     /* populate the LPM table */
-    for (i = 0; i < IPV6_L3FWD_LPM_NUM_ROUTES; i++) {
+    for (i = 0; i < IPV6_GRANTOR_LPM_NUM_ROUTES; i++) {
 
         /* skip unused ports */
-        if ((1 << ipv6_l3fwd_lpm_route_array[i].if_out &
+        if ((1 << ipv6_grantor_lpm_route_array[i].if_out &
                     enabled_port_mask) == 0)
             continue;
 
-        ret = rte_lpm6_add(ipv6_l3fwd_lpm_lookup_struct[socketid],
-                ipv6_l3fwd_lpm_route_array[i].ip,
-                ipv6_l3fwd_lpm_route_array[i].depth,
-                ipv6_l3fwd_lpm_route_array[i].if_out);
+        ret = rte_lpm6_add(ipv6_grantor_lpm_lookup_struct[socketid],
+                ipv6_grantor_lpm_route_array[i].ip,
+                ipv6_grantor_lpm_route_array[i].depth,
+                ipv6_grantor_lpm_route_array[i].if_out);
 
         if (ret < 0) {
             rte_exit(EXIT_FAILURE,
-                    "Unable to add entry %u to the l3fwd LPM table on socket %d\n",
+                    "Unable to add entry %u to the Grantor LPM table on socket %d\n",
                     i, socketid);
         }
 
         printf("LPM: Adding route %s / %d (%d)\n",
                 "IPV6",
-                ipv6_l3fwd_lpm_route_array[i].depth,
-                ipv6_l3fwd_lpm_route_array[i].if_out);
+                ipv6_grantor_lpm_route_array[i].depth,
+                ipv6_grantor_lpm_route_array[i].if_out);
     }
 
 #endif /* SIMMOD */
@@ -350,13 +351,15 @@ lpm_ipv4_route_add(uint32_t ip, uint8_t depth, uint8_t next_hop,
         const int socketid)
 {
     int ret = -1;
-    ret = rte_lpm_add(ipv4_l3fwd_lpm_lookup_struct[socketid],
+    ret = rte_lpm_add(ipv4_grantor_lpm_lookup_struct[socketid],
             ip,
             depth,
             next_hop);
 
     if (ret < 0) {
-        rte_exit(EXIT_FAILURE, "Unable to add an IPv4 entry to the l3fwd LPM table on socket %d\n", socketid);
+        rte_exit(EXIT_FAILURE,
+                "Unable to add an IPv4 entry to the Grantor LPM table on socket %d\n",
+                socketid);
     }
 
     printf("LPM: Adding route 0x%08x / %d (%d)\n", (unsigned)ip, depth, next_hop);
@@ -369,13 +372,15 @@ lpm_ipv6_route_add(uint8_t *ip, uint8_t depth, uint8_t next_hop,
         const int socketid)
 {
     int ret = -1;
-    ret = rte_lpm6_add(ipv6_l3fwd_lpm_lookup_struct[socketid],
+    ret = rte_lpm6_add(ipv6_grantor_lpm_lookup_struct[socketid],
             ip,
             depth,
             next_hop);
 
     if (ret < 0) {
-        rte_exit(EXIT_FAILURE, "Unable to add an IPv6 entry to the l3fwd LPM table on socket %d\n", socketid);
+        rte_exit(EXIT_FAILURE,
+                "Unable to add an IPv6 entry to the Grantor LPM table on socket %d\n", 
+                socketid);
     }
 
     printf("LPM: Adding route %s / %d (%d)\n", "IPv6", depth, next_hop);
@@ -387,12 +392,14 @@ lpm_ipv6_route_add(uint8_t *ip, uint8_t depth, uint8_t next_hop,
 lpm_ipv4_route_del(uint32_t ip, uint8_t depth, const int socketid)
 {
     int ret = -1;
-    ret = rte_lpm_delete(ipv4_l3fwd_lpm_lookup_struct[socketid],
+    ret = rte_lpm_delete(ipv4_grantor_lpm_lookup_struct[socketid],
             ip,
             depth);
 
     if (ret < 0) {
-        rte_exit(EXIT_FAILURE, "Unable to delete an IPv4 entry in the l3fwd LPM table on socket %d\n", socketid);
+        rte_exit(EXIT_FAILURE, 
+                "Unable to delete an IPv4 entry in the Grantor LPM table on socket %d\n", 
+                socketid);
     }
 
     printf("LPM: Deleting route 0x%08x / %d\n", (unsigned)ip, depth);
@@ -404,12 +411,14 @@ int
 lpm_ipv6_route_del(uint8_t *ip, uint8_t depth, const int socketid)
 {
     int ret = -1;
-    ret = rte_lpm6_delete(ipv6_l3fwd_lpm_lookup_struct[socketid],
+    ret = rte_lpm6_delete(ipv6_grantor_lpm_lookup_struct[socketid],
             ip,
             depth);
 
     if (ret < 0) {
-        rte_exit(EXIT_FAILURE, "Unable to delete an IPv6 entry in the l3fwd LPM table on socket %d\n", socketid);
+        rte_exit(EXIT_FAILURE, 
+                "Unable to delete an IPv6 entry in the Grantor LPM table on socket %d\n",
+                socketid);
     }
 
     printf("LPM: Deleting route %s / %d\n", "IPv6", depth);
@@ -421,41 +430,61 @@ lpm_ipv6_route_del(uint8_t *ip, uint8_t depth, const int socketid)
 lpm_ipv4_route_del_all(const int socketid)
 {
     int ret = -1;
-    ret = rte_lpm_delete_all(ipv4_l3fwd_lpm_lookup_struct[socketid]);
+    ret = rte_lpm_delete_all(ipv4_grantor_lpm_lookup_struct[socketid]);
 
     if (ret < 0) {
-        rte_exit(EXIT_FAILURE, "Unable to delete all IPv4 entries in the l3fwd LPM table on socket %d\n", socketid);
+        rte_exit(EXIT_FAILURE,
+                "Unable to delete all IPv4 entries in the Grantor LPM table on socket %d\n",
+                socketid);
     }
 
-    printf("LPM: Deleting all IPv4 routes!\n";
+    printf("LPM: Deleting all IPv4 routes!\n");
 
     return 1;
 }
 
 int
-lpm_ipv6_route_del(const int socketid)
+lpm_ipv6_route_del_all(const int socketid)
 {
     int ret = -1;
-    ret = rte_lpm6_delete_all(ipv6_l3fwd_lpm_lookup_struct[socketid]);
+    ret = rte_lpm6_delete_all(ipv6_grantor_lpm_lookup_struct[socketid]);
 
     if (ret < 0) {
-        rte_exit(EXIT_FAILURE, "Unable to delete all IPv6 entries in the l3fwd LPM table on socket %d\n", socketid);
+        rte_exit(EXIT_FAILURE,
+                "Unable to delete all IPv6 entries in the Grantor LPM table on socket %d\n",
+                socketid);
     }
 
-    printf("LPM: Deleting all IPv6 routes!\n";
+    printf("LPM: Deleting all IPv6 routes!\n");
 
     return 1;
 }
 
+    int
+lpm_lookup(int nb_rx, struct rte_mbuf **pkts_burst, 
+        uint8_t portid, uint16_t *dst_port, const int socketid)
+{
+    int ret = (uint16_t)(-1);
+#if defined(__SSE4_1__)
+    ret = lpm_lookup_packets(nb_rx, pkts_burst,
+            portid, dst_port, socketid);
+#else
+    ret = lpm_no_opt_lookup_packets(nb_rx, pkts_burst,
+            portid, dst_port, socketid);
+#endif /* __SSE_4_1__ */
+
+    return ret;
+}
+
 /* Return ipv4/ipv6 lpm fwd lookup struct. */
     void *
-lpm_get_ipv4_l3fwd_lookup_struct(const int socketid)
+lpm_get_ipv4_grantor_lookup_struct(const int socketid)
 {
-    return ipv4_l3fwd_lpm_lookup_struct[socketid];
+    return ipv4_grantor_lpm_lookup_struct[socketid];
 }
 
     void *
-lpm_get_ipv6_l3fwd_lookup_struct(const int socketid)
+lpm_get_ipv6_grantor_lookup_struct(const int socketid)
 {
-    return ipv6_l3fwd_lpm_lookup_struct[socketid];
+    return ipv6_grantor_lpm_lookup_struct[socketid];
 }
