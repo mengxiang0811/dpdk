@@ -10,7 +10,7 @@ int lpm_ipv4_route_add(uint32_t ip, uint8_t depth, uint8_t next_hop, const int s
 int lpm_ipv4_route_del(uint32_t ip, uint8_t depth, const int socketid);
 void lpm_ipv4_route_del_all(const int socketid);
 uint8_t lpm_lookup_single_packet_with_ipv4(unsigned int ip, int socketid);
-int lpm_lookup_single_packet(struct rte_mbuf *m, int socketid);
+int lpm_lookup_single_packet(struct rte_mbuf *m, uint8_t portid, int socketid);
 void lpm_lookup(int nb_rx, struct rte_mbuf **pkts_burst, uint8_t portid, uint16_t *dst_port, const int socketid);
 void *lpm_get_ipv4_grantor_lookup_struct(const int socketid);
 ]]

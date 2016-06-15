@@ -149,7 +149,7 @@ uint8_t
 lpm_lookup_single_packet_with_ipv4(unsigned int ip, int socketid);
 
 int
-lpm_lookup_single_packet(struct rte_mbuf *m, int socketid);
+lpm_lookup_single_packet(struct rte_mbuf *m, uint8_t portid, int socketid);
 
 void *
 lpm_get_ipv4_grantor_lookup_struct(const int socketid);

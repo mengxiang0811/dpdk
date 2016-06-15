@@ -56,6 +56,7 @@
 
 //#define DEBUG
 #define SIMMOD
+#define MULTIMOD
 
 #define RX_RING_SIZE 128
 #define TX_RING_SIZE 512
@@ -63,6 +64,7 @@
 #define NUM_MBUFS 8191
 #define MBUF_CACHE_SIZE 250
 #define BURST_SIZE 32
+#define MAX_LCORE  4
 
 
 #define IP_VERSION 0x40                                                         
@@ -77,6 +79,7 @@ static const struct rte_eth_conf port_conf_default = {
 
 static unsigned nb_ports;
 struct rte_mempool *mbuf_pool;
+static uint16_t dst_port[MAX_LCORE][BURST_SIZE];
 
 /* the Lua interpreter */
 lua_State* L;
@@ -177,8 +180,12 @@ port_init(uint8_t port, struct rte_mempool *mbuf_pool)
 	static int
 lpm_main_loop(__attribute__((unused)) void *arg)
 {
+	unsigned int lcore_id = rte_lcore_id();
+
 	lua_State *tl = lua_newthread(L);
 
+	printf("\nCore %u forwarding packets with LPM. [Ctrl+C to quit]\n",
+			rte_lcore_id());
 #ifndef SIMMOD
 	uint8_t port;
 
@@ -189,9 +196,6 @@ lpm_main_loop(__attribute__((unused)) void *arg)
 			printf("WARNING, port %u is on remote NUMA node to "
 					"polling thread.\n\tPerformance will "
 					"not be optimal.\n", port);
-
-	printf("\nCore %u forwarding packets with LPM. [Ctrl+C to quit]\n",
-			rte_lcore_id());
 
 	for (;;) {
 		for (port = 0; port < nb_ports; port++) {
@@ -213,12 +217,12 @@ lpm_main_loop(__attribute__((unused)) void *arg)
 				lua_checkstack(tl, 20);
 
 				/* push functions and arguments */
-				lua_getglobal(tl, "llpm_get_dst_port"); /* function to be called */
+				lua_getglobal(tl, "llpm_simple_lookup"); /* function to be called */
 				lua_pushlightuserdata(tl, mbuf);   /* push 1st argument */
 				//lua_pushinteger(tl, 0);   /* push 2nd argument */
 
 				if (lua_pcall(tl, 1, 1, 0) != 0)
-					error(tl, "error running function `llpm_get_dst_port': %s", lua_tostring(tl, -1));
+					error(tl, "error running function `llpm_simple_lookup': %s", lua_tostring(tl, -1));
 
 				/* retrieve result */
 				int nexthop = 0;
@@ -233,10 +237,22 @@ lpm_main_loop(__attribute__((unused)) void *arg)
 		}
 	}
 #else
+
 	int loop = 10;
+
+#ifdef MULTIMOD
+	/* lookup a burst of 5 packets */
+	int len = 0;
+	struct rte_mbuf *pkts[BURST_SIZE];
+#endif /* MULTIMOD */
 
 	while (loop-- > 0) {
 		struct rte_mbuf *mbuf = rte_pktmbuf_alloc(mbuf_pool);
+
+#ifdef MULTIMOD
+		pkts[len++] = mbuf;
+#endif /* MULTIMOD */
+
 #ifdef DEBUG
 		printf("*******************Construct PKT*******************\n");
 #endif
@@ -256,33 +272,56 @@ lpm_main_loop(__attribute__((unused)) void *arg)
 		new_ip_addr += loop * (1 << 24) + (1 << 16) + (1 << 8) + loop;
 
 		ip->dst_addr = rte_cpu_to_be_32(new_ip_addr);
- 
+
+#ifdef MULTIMOD
+		if (len % 5 != 0) continue;
+#endif /* MULTIMOD */
+
 #ifdef DEBUG
 		unsigned int len = rte_pktmbuf_data_len(mbuf);
 		rte_pktmbuf_dump(stdout, mbuf, len);
-
 		printf("***************PKT LOOKUP**************\n");
 #endif
+
 		lua_checkstack(tl, 20);
 
+#ifdef MULTIMOD
+		//printf("In the multi packets mode!!!\n");
 		/* push functions and arguments */
-		lua_getglobal(tl, "llpm_get_dst_port"); /* function to be called */
-		lua_pushlightuserdata(tl, (void *)mbuf);   /* push 1st argument */
+		lua_getglobal(tl, "llpm_opt_lpm_lookup"); /* function to be called */
+		lua_pushinteger(tl, len);   /* push 1st argument: #packets */
+		lua_pushlightuserdata(tl, pkts);   /* push 2nd argument: packets */
+		lua_pushlightuserdata(tl, dst_port[lcore_id]);   /* push 3rd argument: destination ports buffer for this lcore */
+		//lua_pushinteger(tl, 0);   /* push 4th argument: socketid */
+
+		if (lua_pcall(tl, 3, 0, 0) != 0)
+			error(tl, "error running function `llpm_opt_lpm_lookup': %s", lua_tostring(tl, -1));
+
+		int i = 0;
+
+		for (i = 0; i < len; i++) {
+			printf("LCORE %d#######The next hop is %d for packet %d\n", rte_lcore_id(), dst_port[lcore_id][i], i);
+			rte_pktmbuf_free(pkts[i]);
+		}
+
+		len = 0;
+#else
+		/* push functions and arguments */
+		lua_getglobal(tl, "llpm_simple_lookup"); /* function to be called */
+		lua_pushlightuserdata(tl, mbuf);   /* push 1st argument */
 		//lua_pushinteger(tl, 0);   /* push 2nd argument */
 
 		if (lua_pcall(tl, 1, 1, 0) != 0)
-			error(tl, "error running function `llpm_get_dst_port': %s", lua_tostring(tl, -1));
+			error(tl, "error running function `llpm_simple_lookup': %s", lua_tostring(tl, -1));
 
 		/* retrieve result */
 		int nexthop = 0;
 		nexthop = lua_tointeger(tl, -1);
 		lua_pop(tl, 1);  /* pop returned value */
-
 		printf("LCORE %d#######The next hop is %d for %d.1.1.%d\n", rte_lcore_id(), nexthop, loop, loop);
-
 		rte_pktmbuf_free(mbuf);
-
-		sleep(rand()%10);
+		sleep(rand()%3);
+#endif /* MULTIMOD */
 	}
 
 #endif
@@ -345,20 +384,20 @@ main(int argc, char **argv)
 
 #if 1
 	/* load the script */
-	//luaL_loadfile(L, "./lpm.lua");
-	luaL_loadfile(L, "./test.lua");
+	luaL_loadfile(L, "./first_policy.lua");
+	//luaL_loadfile(L, "./test.lua");
 	if (lua_pcall(L, 0, 0, 0) != 0)
-		error(L, "error running function `lpm.lua': %s", lua_tostring(L, -1));
+		error(L, "error running function `first_policy.lua': %s", lua_tostring(L, -1));
 
 	printf("After load the lua file!!!\n");
 	/* setup the LPM table */
-	//lua_getglobal(L, "llpm_setup");
-	lua_getglobal(L, "test");
+	lua_getglobal(L, "llpm_setup");
+	//lua_getglobal(L, "test");
 	if (lua_pcall(L, 0, 0, 0) != 0)
 		error(L, "error running function `llpm_setup': %s", lua_tostring(L, -1));
 #endif
 
-#if 0
+#if 1
 	/* call lpm_main_loop() on every slave lcore */
 	RTE_LCORE_FOREACH_SLAVE(lcore_id) {
 		rte_eal_remote_launch(lpm_main_loop, NULL, lcore_id);
@@ -366,7 +405,7 @@ main(int argc, char **argv)
 #endif
 
 	/* call it on master lcore too */
-	//lpm_main_loop(NULL);
+	lpm_main_loop(NULL);
 
 	rte_eal_mp_wait_lcore();
 
