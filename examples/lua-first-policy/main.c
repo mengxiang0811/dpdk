@@ -345,20 +345,20 @@ main(int argc, char **argv)
 
 #if 1
 	/* load the script */
-	luaL_loadfile(L, "./lpm.lua");
-	//luaL_loadfile(L, "./test.lua");
+	//luaL_loadfile(L, "./lpm.lua");
+	luaL_loadfile(L, "./test.lua");
 	if (lua_pcall(L, 0, 0, 0) != 0)
 		error(L, "error running function `lpm.lua': %s", lua_tostring(L, -1));
 
 	printf("After load the lua file!!!\n");
 	/* setup the LPM table */
-	lua_getglobal(L, "llpm_setup");
-	//lua_getglobal(L, "test");
+	//lua_getglobal(L, "llpm_setup");
+	lua_getglobal(L, "test");
 	if (lua_pcall(L, 0, 0, 0) != 0)
 		error(L, "error running function `llpm_setup': %s", lua_tostring(L, -1));
 #endif
 
-#if 1
+#if 0
 	/* call lpm_main_loop() on every slave lcore */
 	RTE_LCORE_FOREACH_SLAVE(lcore_id) {
 		rte_eal_remote_launch(lpm_main_loop, NULL, lcore_id);
@@ -366,7 +366,7 @@ main(int argc, char **argv)
 #endif
 
 	/* call it on master lcore too */
-	lpm_main_loop(NULL);
+	//lpm_main_loop(NULL);
 
 	rte_eal_mp_wait_lcore();
 

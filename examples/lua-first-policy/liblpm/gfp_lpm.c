@@ -372,6 +372,32 @@ lpm_lookup(int nb_rx, struct rte_mbuf **pkts_burst,
 #endif /* __SSE_4_1__ */
 }
 
+uint8_t lpm_lookup_single_packet_with_ipv4(unsigned int ip, int socketid) {
+	/* invalid port number */
+	uint32_t next_hop;
+
+	return (uint8_t) ((rte_lpm_lookup(ipv4_grantor_lpm_lookup_struct[socketid],
+		ip,
+		&next_hop) == 0) ? next_hop : 255);
+}
+
+int lpm_lookup_single_packet(struct rte_mbuf *m, int socketid) {
+    struct ether_hdr *eth_hdr;
+    struct ipv4_hdr *ipv4_hdr;
+
+    eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
+
+    if (RTE_ETH_IS_IPV4_HDR(m->packet_type)) {
+        /* Handle IPv4 headers.*/
+        ipv4_hdr = rte_pktmbuf_mtod_offset(m, struct ipv4_hdr *,
+                sizeof(struct ether_hdr));
+	
+        return lpm_lookup_single_packet_with_ipv4(rte_be_to_cpu_32(((struct ipv4_hdr *)ipv4_hdr)->dst_addr), socketid);
+    }
+
+    return -1;
+}
+
 /* Return ipv4/ipv6 lpm fwd lookup struct. */
     void *
 lpm_get_ipv4_grantor_lookup_struct(const int socketid)
