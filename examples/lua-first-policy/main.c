@@ -255,7 +255,7 @@ lpm_main_loop(__attribute__((unused)) void *arg)
 
 #ifdef DEBUG
 		printf("*******************Construct PKT*******************\n");
-#endif
+#endif /* DEBUG */
 		mbuf->packet_type |= RTE_PTYPE_L3_IPV4;
 		struct ether_hdr *pneth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr));
 		//struct ether_hdr *pneth = rte_pktmbuf_mtod(&mbuf, struct ether_hdr *);
@@ -281,7 +281,7 @@ lpm_main_loop(__attribute__((unused)) void *arg)
 		unsigned int len = rte_pktmbuf_data_len(mbuf);
 		rte_pktmbuf_dump(stdout, mbuf, len);
 		printf("***************PKT LOOKUP**************\n");
-#endif
+#endif /* DEBUG */
 
 		lua_checkstack(tl, 20);
 
@@ -324,7 +324,8 @@ lpm_main_loop(__attribute__((unused)) void *arg)
 #endif /* MULTIMOD */
 	}
 
-#endif
+#endif /* SIMMOD */
+
 	return 0;
 }
 
@@ -342,6 +343,7 @@ main(int argc, char **argv)
 	ret = rte_eal_init(argc, argv);
 	if (ret < 0)
 		rte_panic("Cannot init EAL\n");
+
 #ifndef SIMMOD
 	argc -= ret;
 	argv += ret;
@@ -374,7 +376,8 @@ main(int argc, char **argv)
 	if (mbuf_pool == NULL)
 		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
 
-#endif
+#endif /* SIMMOD */
+
 	/* initialize Lua */
 	L = luaL_newstate();
 	//lua_open();
@@ -395,14 +398,14 @@ main(int argc, char **argv)
 	//lua_getglobal(L, "test");
 	if (lua_pcall(L, 0, 0, 0) != 0)
 		error(L, "error running function `llpm_setup': %s", lua_tostring(L, -1));
-#endif
+#endif /* 1 */
 
 #if 1
 	/* call lpm_main_loop() on every slave lcore */
 	RTE_LCORE_FOREACH_SLAVE(lcore_id) {
 		rte_eal_remote_launch(lpm_main_loop, NULL, lcore_id);
 	}
-#endif
+#endif /* 1 */
 
 	/* call it on master lcore too */
 	lpm_main_loop(NULL);
