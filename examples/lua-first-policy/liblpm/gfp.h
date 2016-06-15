@@ -111,7 +111,7 @@ is_valid_ipv4_pkt(struct ipv4_hdr *pkt, uint32_t link_len)
 
 /* Function pointers for LPM functionality. */
 void 
-lpm_check_ports();
+lpm_check_ports(void);
 
 void
 lpm_setup(const int mode, const int socketid);
