@@ -279,7 +279,7 @@ lpm_ipv4_route_add(uint32_t ip, uint8_t depth, uint8_t next_hop,
                 socketid);
     }
 
-    printf("LPM: Adding route 0x%08x / %d (%d)\n", (unsigned)ip, depth, next_hop);
+    printf("LPM: Adding route 0x%08x / %d (%d) on socket %d\n", (unsigned)ip, depth, next_hop, socketid);
 
     return 1;
 }
@@ -300,7 +300,7 @@ lpm_ipv6_route_add(uint8_t *ip, uint8_t depth, uint8_t next_hop,
                 socketid);
     }
 
-    printf("LPM: Adding route %s / %d (%d)\n", "IPv6", depth, next_hop);
+    printf("LPM: Adding route %s / %d (%d) on socket %d\n", "IPv6", depth, next_hop, socketid);
 
     return 1;
 }
@@ -319,7 +319,7 @@ lpm_ipv4_route_del(uint32_t ip, uint8_t depth, const int socketid)
                 socketid);
     }
 
-    printf("LPM: Deleting route 0x%08x / %d\n", (unsigned)ip, depth);
+    printf("LPM: Deleting route 0x%08x / %d on socket %d\n", (unsigned)ip, depth, socketid);
 
     return 1;
 }
@@ -338,43 +338,25 @@ lpm_ipv6_route_del(uint8_t *ip, uint8_t depth, const int socketid)
                 socketid);
     }
 
-    printf("LPM: Deleting route %s / %d\n", "IPv6", depth);
+    printf("LPM: Deleting route %s / %d on socket %d\n", "IPv6", depth, socketid);
 
     return 1;
 }
 
-    int
+void
 lpm_ipv4_route_del_all(const int socketid)
 {
-    int ret = -1;
-    ret = rte_lpm_delete_all(ipv4_grantor_lpm_lookup_struct[socketid]);
+    rte_lpm_delete_all(ipv4_grantor_lpm_lookup_struct[socketid]);
 
-    if (ret < 0) {
-        rte_exit(EXIT_FAILURE,
-                "Unable to delete all IPv4 entries in the Grantor LPM table on socket %d\n",
-                socketid);
-    }
-
-    printf("LPM: Deleting all IPv4 routes!\n");
-
-    return 1;
+    printf("LPM: Deleting all IPv4 routes on socket %d!\n", socketid);
 }
 
-int
+void
 lpm_ipv6_route_del_all(const int socketid)
 {
-    int ret = -1;
-    ret = rte_lpm6_delete_all(ipv6_grantor_lpm_lookup_struct[socketid]);
+    rte_lpm6_delete_all(ipv6_grantor_lpm_lookup_struct[socketid]);
 
-    if (ret < 0) {
-        rte_exit(EXIT_FAILURE,
-                "Unable to delete all IPv6 entries in the Grantor LPM table on socket %d\n",
-                socketid);
-    }
-
-    printf("LPM: Deleting all IPv6 routes!\n");
-
-    return 1;
+    printf("LPM: Deleting all IPv6 routes on socket %d!\n", socketid);
 }
 
     int
