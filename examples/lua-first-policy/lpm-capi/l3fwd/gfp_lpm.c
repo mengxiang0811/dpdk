@@ -164,7 +164,7 @@ void lpm_check_ports()
 	nb_ports = rte_eth_dev_count();
 
     for (portid = 0; portid < nb_ports; portid++)
-        lpm_check_ptype(portid)
+        lpm_check_ptype(portid);
 }
 
     void
