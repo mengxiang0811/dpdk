@@ -31,17 +31,17 @@
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __L3FWD_LPM_H__
-#define __L3FWD_LPM_H__
+#ifndef __GFP_LPM_H__
+#define __GFP_LPM_H__
 
 static inline uint8_t
 lpm_get_ipv4_dst_port(void *ipv4_hdr,  uint8_t portid, void *lookup_struct)
 {
 	uint32_t next_hop;
-	struct rte_lpm *ipv4_l3fwd_lookup_struct =
+	struct rte_lpm *ipv4_grantor_lookup_struct =
 		(struct rte_lpm *)lookup_struct;
 
-	return (uint8_t) ((rte_lpm_lookup(ipv4_l3fwd_lookup_struct,
+	return (uint8_t) ((rte_lpm_lookup(ipv4_grantor_lookup_struct,
 		rte_be_to_cpu_32(((struct ipv4_hdr *)ipv4_hdr)->dst_addr),
 		&next_hop) == 0) ? next_hop : portid);
 }
@@ -50,10 +50,10 @@ static inline uint8_t
 lpm_get_ipv6_dst_port(void *ipv6_hdr,  uint8_t portid, void *lookup_struct)
 {
 	uint8_t next_hop;
-	struct rte_lpm6 *ipv6_l3fwd_lookup_struct =
+	struct rte_lpm6 *ipv6_grantor_lookup_struct =
 		(struct rte_lpm6 *)lookup_struct;
 
-	return (uint8_t) ((rte_lpm6_lookup(ipv6_l3fwd_lookup_struct,
+	return (uint8_t) ((rte_lpm6_lookup(ipv6_grantor_lookup_struct,
 			((struct ipv6_hdr *)ipv6_hdr)->dst_addr,
 			&next_hop) == 0) ?  next_hop : portid);
 }
@@ -131,4 +131,4 @@ lpm_no_opt_lookup_packets(int nb_rx, struct rte_mbuf **pkts_burst,
 		dst_port[j] = lpm_simple_lookup(pkts_burst[j], portid, socketid);
 }
 
-#endif /* __L3FWD_LPM_H__ */
+#endif /* __GFP_LPM_H__ */

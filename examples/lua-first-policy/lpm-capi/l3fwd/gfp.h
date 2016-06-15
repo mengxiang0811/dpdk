@@ -31,8 +31,8 @@
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __L3_FWD_H__
-#define __L3_FWD_H__
+#ifndef __GRANTOR_FIRST_POLICY_H__
+#define __GRANTOR_FIRST_POLICY_H__
 
 #include <rte_vect.h>
 
@@ -151,4 +151,4 @@ lpm_get_ipv4_grantor_lookup_struct(const int socketid);
 void *
 lpm_get_ipv6_grantor_lookup_struct(const int socketid);
 
-#endif  /* __L3_FWD_H__ */
+#endif  /* __GRANTOR_FIRST_POLICY_H__ */

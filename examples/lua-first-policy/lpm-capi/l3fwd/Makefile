@@ -1,6 +1,6 @@
 #   BSD LICENSE
 #
-#   Copyright(c) 2010-2016 Intel Corporation. All rights reserved.
+#   Copyright(c) 2010-2014 Intel Corporation. All rights reserved.
 #   All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or without
@@ -34,18 +34,27 @@ $(error "Please define RTE_SDK environment variable")
 endif
 
 # Default target, can be overriden by command line or environment
+RTE_SDK = /home/vagrant/ddos/dpdk
 RTE_TARGET ?= x86_64-native-linuxapp-gcc
 
 include $(RTE_SDK)/mk/rte.vars.mk
 
+#CONFIG_RTE_BUILD_SHARED_LIB=y
 # binary name
-APP = l3fwd
+#LIB = libhelloworld.so
+SHARED = libgfp_lpm.so
 
 # all source are stored in SRCS-y
-SRCS-y := main.c l3fwd_lpm.c
+SRCS-y := gfp_lpm.c
 
-CFLAGS += -I$(SRCDIR)
-CFLAGS += -O3 $(USER_FLAGS)
-CFLAGS += $(WERROR_FLAGS)
+RTE_BUILD_SHARED_LIB=y
+#CFLAGS += -fPIC
+LDLIBS += -lrte_eal -lrte_lpm
+CFLAGS += -O3
+#CFLAGS += $(WERROR_FLAGS) -L/home/developer/dpdk/x86_64-native-linuxapp-gcc/lib/
+CFLAGS += -L/home/vagrant/ddos/dpdk/x86_64-native-linuxapp-gcc/lib
+EXTRA_CFLAGS += -g -O0
+#CFLAGS += $(WERROR_FLAGS) -L$(LDLIBS)
 
-include $(RTE_SDK)/mk/rte.extapp.mk
+#include $(RTE_SDK)/mk/rte.extlib.mk
+include $(RTE_SDK)/mk/rte.extshared.mk

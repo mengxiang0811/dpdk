@@ -31,13 +31,13 @@
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __L3FWD_LPM_SSE_H__
-#define __L3FWD_LPM_SSE_H__
+#ifndef __GFP_LPM_SSE_H__
+#define __GFP_LPM_SSE_H__
 
-#include "l3fwd_sse.h"
+#include "gfp_sse.h"
 
 static inline __attribute__((always_inline)) uint16_t
-lpm_get_dst_port(const struct lcore_conf *qconf, struct rte_mbuf *pkt,
+lpm_get_dst_port(const int socketid, struct rte_mbuf *pkt,
 		uint8_t portid)
 {
 	uint32_t next_hop_ipv4;
@@ -51,7 +51,7 @@ lpm_get_dst_port(const struct lcore_conf *qconf, struct rte_mbuf *pkt,
 		eth_hdr = rte_pktmbuf_mtod(pkt, struct ether_hdr *);
 		ipv4_hdr = (struct ipv4_hdr *)(eth_hdr + 1);
 
-		return (uint16_t) ((rte_lpm_lookup(qconf->ipv4_lookup_struct,
+		return (uint16_t) ((rte_lpm_lookup(ipv4_grantor_lpm_lookup_struct[socketid],
 				rte_be_to_cpu_32(ipv4_hdr->dst_addr), &next_hop_ipv4) == 0) ?
 						next_hop_ipv4 : portid);
 
@@ -60,7 +60,7 @@ lpm_get_dst_port(const struct lcore_conf *qconf, struct rte_mbuf *pkt,
 		eth_hdr = rte_pktmbuf_mtod(pkt, struct ether_hdr *);
 		ipv6_hdr = (struct ipv6_hdr *)(eth_hdr + 1);
 
-		return (uint16_t) ((rte_lpm6_lookup(qconf->ipv6_lookup_struct,
+		return (uint16_t) ((rte_lpm6_lookup(ipv6_grantor_lpm_lookup_struct[socketid],
 				ipv6_hdr->dst_addr, &next_hop_ipv6) == 0)
 				? next_hop_ipv6 : portid);
 
@@ -75,7 +75,7 @@ lpm_get_dst_port(const struct lcore_conf *qconf, struct rte_mbuf *pkt,
  * header and dst_ipv4 value is not used.
  */
 static inline __attribute__((always_inline)) uint16_t
-lpm_get_dst_port_with_ipv4(const struct lcore_conf *qconf, struct rte_mbuf *pkt,
+lpm_get_dst_port_with_ipv4(const int socketid, struct rte_mbuf *pkt,
 	uint32_t dst_ipv4, uint8_t portid)
 {
 	uint32_t next_hop_ipv4;
@@ -84,7 +84,7 @@ lpm_get_dst_port_with_ipv4(const struct lcore_conf *qconf, struct rte_mbuf *pkt,
 	struct ether_hdr *eth_hdr;
 
 	if (RTE_ETH_IS_IPV4_HDR(pkt->packet_type)) {
-		return (uint16_t) ((rte_lpm_lookup(qconf->ipv4_lookup_struct, dst_ipv4,
+		return (uint16_t) ((rte_lpm_lookup(ipv4_grantor_lpm_lookup_struct[socketid], dst_ipv4,
 			&next_hop_ipv4) == 0) ? next_hop_ipv4 : portid);
 
 	} else if (RTE_ETH_IS_IPV6_HDR(pkt->packet_type)) {
@@ -92,7 +92,7 @@ lpm_get_dst_port_with_ipv4(const struct lcore_conf *qconf, struct rte_mbuf *pkt,
 		eth_hdr = rte_pktmbuf_mtod(pkt, struct ether_hdr *);
 		ipv6_hdr = (struct ipv6_hdr *)(eth_hdr + 1);
 
-		return (uint16_t) ((rte_lpm6_lookup(qconf->ipv6_lookup_struct,
+		return (uint16_t) ((rte_lpm6_lookup(ipv6_grantor_lpm_lookup_struct[socketid],
 				ipv6_hdr->dst_addr, &next_hop_ipv6) == 0)
 				? next_hop_ipv6 : portid);
 
@@ -142,7 +142,7 @@ processx4_step1(struct rte_mbuf *pkt[FWDSTEP],
  * If lookup fails, use incoming port (portid) as destination port.
  */
 static inline void
-processx4_step2(const struct lcore_conf *qconf,
+processx4_step2(const int socketid,
 		__m128i dip,
 		uint32_t ipv4_flag,
 		uint8_t portid,
@@ -158,17 +158,17 @@ processx4_step2(const struct lcore_conf *qconf,
 
 	/* if all 4 packets are IPV4. */
 	if (likely(ipv4_flag)) {
-		rte_lpm_lookupx4(qconf->ipv4_lookup_struct, dip, dst.u32,
+		rte_lpm_lookupx4(ipv4_grantor_lpm_lookup_struct[socketid], dip, dst.u32,
 			portid);
 		/* get rid of unused upper 16 bit for each dport. */
 		dst.x = _mm_packs_epi32(dst.x, dst.x);
 		*(uint64_t *)dprt = dst.u64[0];
 	} else {
 		dst.x = dip;
-		dprt[0] = lpm_get_dst_port_with_ipv4(qconf, pkt[0], dst.u32[0], portid);
-		dprt[1] = lpm_get_dst_port_with_ipv4(qconf, pkt[1], dst.u32[1], portid);
-		dprt[2] = lpm_get_dst_port_with_ipv4(qconf, pkt[2], dst.u32[2], portid);
-		dprt[3] = lpm_get_dst_port_with_ipv4(qconf, pkt[3], dst.u32[3], portid);
+		dprt[0] = lpm_get_dst_port_with_ipv4(socketid, pkt[0], dst.u32[0], portid);
+		dprt[1] = lpm_get_dst_port_with_ipv4(socketid, pkt[1], dst.u32[1], portid);
+		dprt[2] = lpm_get_dst_port_with_ipv4(socketid, pkt[2], dst.u32[2], portid);
+		dprt[3] = lpm_get_dst_port_with_ipv4(socketid, pkt[3], dst.u32[3], portid);
 	}
 }
 
@@ -177,11 +177,10 @@ processx4_step2(const struct lcore_conf *qconf,
  * from main_loop.
  */
 static inline void
-l3fwd_lpm_send_packets(int nb_rx, struct rte_mbuf **pkts_burst,
-			uint8_t portid, struct lcore_conf *qconf)
+lpm_opt_lookup_packets(int nb_rx, struct rte_mbuf **pkts_burst,
+			uint8_t portid, uint16_t *dst_port, const int socketid)
 {
 	int32_t j;
-	uint16_t dst_port[MAX_PKT_BURST];
 	__m128i dip[MAX_PKT_BURST / FWDSTEP];
 	uint32_t ipv4_flag[MAX_PKT_BURST / FWDSTEP];
 	const int32_t k = RTE_ALIGN_FLOOR(nb_rx, FWDSTEP);
@@ -191,23 +190,21 @@ l3fwd_lpm_send_packets(int nb_rx, struct rte_mbuf **pkts_burst,
 				&ipv4_flag[j / FWDSTEP]);
 
 	for (j = 0; j != k; j += FWDSTEP)
-		processx4_step2(qconf, dip[j / FWDSTEP],
+		processx4_step2(socketid, dip[j / FWDSTEP],
 				ipv4_flag[j / FWDSTEP], portid, &pkts_burst[j], &dst_port[j]);
 
 	/* Classify last up to 3 packets one by one */
 	switch (nb_rx % FWDSTEP) {
 	case 3:
-		dst_port[j] = lpm_get_dst_port(qconf, pkts_burst[j], portid);
+		dst_port[j] = lpm_get_dst_port(socketid, pkts_burst[j], portid);
 		j++;
 	case 2:
-		dst_port[j] = lpm_get_dst_port(qconf, pkts_burst[j], portid);
+		dst_port[j] = lpm_get_dst_port(socketid, pkts_burst[j], portid);
 		j++;
 	case 1:
-		dst_port[j] = lpm_get_dst_port(qconf, pkts_burst[j], portid);
+		dst_port[j] = lpm_get_dst_port(socketid, pkts_burst[j], portid);
 		j++;
 	}
-
-	send_packets_multi(qconf, pkts_burst, dst_port, nb_rx);
 }
 
-#endif /* __L3FWD_LPM_SSE_H__ */
+#endif /* __GFP_LPM_SSE_H__ */

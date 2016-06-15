@@ -56,7 +56,7 @@
 #include <rte_lpm.h>
 #include <rte_lpm6.h>
 
-#include "l3fwd.h"
+#include "gfp.h"
 
 //#define SIMMOD
 
@@ -111,92 +111,9 @@ struct rte_lpm *ipv4_grantor_lpm_lookup_struct[NB_SOCKETS];
 struct rte_lpm6 *ipv6_grantor_lpm_lookup_struct[NB_SOCKETS];
 
 #if defined(__SSE4_1__)
-#include "l3fwd_lpm_sse.h"
+#include "gfp_lpm_sse.h"
 #else
-#include "l3fwd_lpm.h"
-#endif
-
-#if 0
-/* main processing loop */
-int
-lpm_main_loop(__attribute__((unused)) void *dummy)
-{
-	struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
-	unsigned lcore_id;
-	uint64_t prev_tsc, diff_tsc, cur_tsc;
-	int i, nb_rx;
-	uint8_t portid, queueid;
-	struct lcore_conf *qconf;
-	const uint64_t drain_tsc = (rte_get_tsc_hz() + US_PER_S - 1) /
-		US_PER_S * BURST_TX_DRAIN_US;
-
-	prev_tsc = 0;
-
-	lcore_id = rte_lcore_id();
-	qconf = &lcore_conf[lcore_id];
-
-	if (qconf->n_rx_queue == 0) {
-		RTE_LOG(INFO, L3FWD, "lcore %u has nothing to do\n", lcore_id);
-		return 0;
-	}
-
-	RTE_LOG(INFO, L3FWD, "entering main loop on lcore %u\n", lcore_id);
-
-	for (i = 0; i < qconf->n_rx_queue; i++) {
-
-		portid = qconf->rx_queue_list[i].port_id;
-		queueid = qconf->rx_queue_list[i].queue_id;
-		RTE_LOG(INFO, L3FWD,
-			" -- lcoreid=%u portid=%hhu rxqueueid=%hhu\n",
-			lcore_id, portid, queueid);
-	}
-
-	while (!force_quit) {
-
-		cur_tsc = rte_rdtsc();
-
-		/*
-		 * TX burst queue drain
-		 */
-		diff_tsc = cur_tsc - prev_tsc;
-		if (unlikely(diff_tsc > drain_tsc)) {
-
-			for (i = 0; i < qconf->n_tx_port; ++i) {
-				portid = qconf->tx_port_id[i];
-				if (qconf->tx_mbufs[portid].len == 0)
-					continue;
-				send_burst(qconf,
-					qconf->tx_mbufs[portid].len,
-					portid);
-				qconf->tx_mbufs[portid].len = 0;
-			}
-
-			prev_tsc = cur_tsc;
-		}
-
-		/*
-		 * Read packet from RX queues
-		 */
-		for (i = 0; i < qconf->n_rx_queue; ++i) {
-			portid = qconf->rx_queue_list[i].port_id;
-			queueid = qconf->rx_queue_list[i].queue_id;
-			nb_rx = rte_eth_rx_burst(portid, queueid, pkts_burst,
-				MAX_PKT_BURST);
-			if (nb_rx == 0)
-				continue;
-
-#if defined(__SSE4_1__)
-			l3fwd_lpm_send_packets(nb_rx, pkts_burst,
-						portid, qconf);
-#else
-			l3fwd_lpm_no_opt_send_packets(nb_rx, pkts_burst,
-							portid, qconf);
-#endif /* __SSE_4_1__ */
-		}
-	}
-
-	return 0;
-}
+#include "gfp_lpm.h"
 #endif
 
 /*
@@ -466,7 +383,7 @@ lpm_lookup(int nb_rx, struct rte_mbuf **pkts_burst,
 {
     int ret = (uint16_t)(-1);
 #if defined(__SSE4_1__)
-    ret = lpm_lookup_packets(nb_rx, pkts_burst,
+    ret = lpm_opt_lookup_packets(nb_rx, pkts_burst,
             portid, dst_port, socketid);
 #else
     ret = lpm_no_opt_lookup_packets(nb_rx, pkts_burst,

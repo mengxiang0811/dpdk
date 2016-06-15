@@ -32,10 +32,10 @@
  */
 
 
-#ifndef _L3FWD_COMMON_H_
-#define _L3FWD_COMMON_H_
+#ifndef _GFP_COMMON_H_
+#define _GFP_COMMON_H_
 
-#include "l3fwd.h"
+#include "gfp.h"
 
 #ifdef DO_RFC_1812_CHECKS
 
@@ -80,4 +80,4 @@ rfc1812_process(struct ipv4_hdr *ipv4_hdr, uint16_t *dp, uint32_t ptype)
 #define	rfc1812_process(mb, dp, ptype)	do { } while (0)
 #endif /* DO_RFC_1812_CHECKS */
 
-#endif /* _L3FWD_COMMON_H_ */ 
+#endif /* _GFP_COMMON_H_ */ 
