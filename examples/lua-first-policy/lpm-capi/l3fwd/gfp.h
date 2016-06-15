@@ -131,17 +131,17 @@ lpm_ipv4_route_del(uint32_t ip, uint8_t depth, const int socketid);
 int
 lpm_ipv6_route_del(uint8_t *ip, uint8_t depth, const int socketid);
 
-int
+void
 lpm_ipv4_route_del_all(const int socketid);
 
-int
+void
 lpm_ipv6_route_del_all(const int socketid);
 
 /* 
  * store the dst_port information in a global data structure? 
  * e.g., dst_port[lcore_id][32] for each lcore
  */
-int
+void
 lpm_lookup(int nb_rx, struct rte_mbuf **pkts_burst, 
         uint8_t portid, uint16_t *dst_port, const int socketid);
 

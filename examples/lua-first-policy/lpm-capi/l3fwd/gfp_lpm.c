@@ -359,20 +359,17 @@ lpm_ipv6_route_del_all(const int socketid)
     printf("LPM: Deleting all IPv6 routes on socket %d!\n", socketid);
 }
 
-    int
+void   
 lpm_lookup(int nb_rx, struct rte_mbuf **pkts_burst, 
         uint8_t portid, uint16_t *dst_port, const int socketid)
 {
-    int ret = (uint16_t)(-1);
 #if defined(__SSE4_1__)
-    ret = lpm_opt_lookup_packets(nb_rx, pkts_burst,
+    lpm_opt_lookup_packets(nb_rx, pkts_burst,
             portid, dst_port, socketid);
 #else
-    ret = lpm_no_opt_lookup_packets(nb_rx, pkts_burst,
+    lpm_no_opt_lookup_packets(nb_rx, pkts_burst,
             portid, dst_port, socketid);
 #endif /* __SSE_4_1__ */
-
-    return ret;
 }
 
 /* Return ipv4/ipv6 lpm fwd lookup struct. */
