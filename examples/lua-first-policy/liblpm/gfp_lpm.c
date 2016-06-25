@@ -381,6 +381,15 @@ uint8_t lpm_lookup_single_packet_with_ipv4(unsigned int ip, int socketid) {
 					&next_hop) == 0) ? next_hop : 255);
 }
 
+uint8_t lpm_lookup_single_packet_with_ipv6(uint8_t ip6_addr[16], int socketid) {
+	/* invalid port number */
+	uint8_t next_hop;
+
+	return (uint8_t) ((rte_lpm6_lookup(ipv6_grantor_lpm_lookup_struct[socketid],
+					ip6_addr,
+					&next_hop) == 0) ?  next_hop : 255);
+}
+
 int lpm_lookup_single_packet(struct rte_mbuf *m, uint8_t portid, int socketid) {
 	struct ether_hdr *eth_hdr;
 	struct ipv4_hdr *ipv4_hdr;
@@ -393,6 +402,13 @@ int lpm_lookup_single_packet(struct rte_mbuf *m, uint8_t portid, int socketid) {
 				sizeof(struct ether_hdr));
 
 		return lpm_lookup_single_packet_with_ipv4(rte_be_to_cpu_32(((struct ipv4_hdr *)ipv4_hdr)->dst_addr), socketid);
+	} else if (RTE_ETH_IS_IPV6_HDR(m->packet_type)) {
+		/* Handle IPv6 headers.*/
+		struct ipv6_hdr *ipv6_hdr;
+
+		ipv6_hdr = rte_pktmbuf_mtod_offset(m, struct ipv6_hdr *,
+				sizeof(struct ether_hdr));
+		return lpm_lookup_single_packet_with_ipv6(((struct ipv6_hdr *)ipv6_hdr)->dst_addr, socketid);
 	}
 
 	return portid;
