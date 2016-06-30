@@ -430,7 +430,7 @@ lpm_get_ipv4_grantor_lookup_struct_for_lookup(const int lcoreid)
 }
 
 	void *
-lpm_get_ipv4_grantor_lookup_struct_for_upate(const int lcoreid)
+lpm_get_ipv4_grantor_lookup_struct_for_update(const int lcoreid)
 {
 	int active = active_lookup_struct_idx[lcoreid];
 	return ipv4_grantor_lpm_lookup_struct[lcoreid][1 - active];

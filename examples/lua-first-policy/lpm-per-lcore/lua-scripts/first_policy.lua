@@ -28,7 +28,7 @@ void lpm_lookup(int nb_rx, struct rte_mbuf **pkts_burst, uint8_t portid, uint16_
 
 void lpm_change_grantor_active_lookup_structure(const int lcoreid);
 
-void *lpm_get_ipv4_grantor_lookup_struct(const int lcoreid);
+void *lpm_get_ipv4_grantor_lookup_struct_for_update(const int lcoreid);
 
 int get_lcore();
 int poll(struct pollfd *fds, unsigned long nfds, int timeout);
@@ -49,6 +49,8 @@ function lpm_table_init(lcore_id)
             print("\tLPM: Adding route " .. entry[1] .. " " .. entry[2] .. " " .. entry[3])
         end
     end
+	print("After initialize the routing table on lcore " .. lcore_id .. ", make it active!!!")
+	llpm.lpm_change_grantor_active_lookup_structure(lcore_id)
 end
 
 function lpm_init()
