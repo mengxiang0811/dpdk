@@ -27,9 +27,10 @@ cycles_to_sec_init()
         }
     }
 
-    printf("\nIn current system, there are around %llu cycles per second!\n", cycles_per_sec);
+    printf("\nIn current system, there are around %" PRIu64 "cycles per second!\n", cycles_per_sec);
 }
 
+#if 0
     static uint64_t
 time_diff_in_us(uint64_t new_tsc, uint64_t old_tsc)
 {
@@ -41,3 +42,4 @@ time_diff_in_s(uint64_t new_tsc, uint64_t old_tsc)
 {
     return (double)time_diff_in_us(new_tsc, old_tsc) * 0.000001;
 }
+#endif

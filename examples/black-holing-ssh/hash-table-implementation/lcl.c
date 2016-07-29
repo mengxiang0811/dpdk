@@ -1,5 +1,9 @@
 #include "lcl.h"
 
+#pragma GCC diagnostic push  // require GCC 4.6
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#pragma GCC diagnostic ignored "-W"
+
 long hash31(int64_t a, int64_t b, int64_t x)
 {
 
@@ -37,9 +41,6 @@ visit http://creativecommons.org/licenses/by-nc/1.0/ or send a letter
 to Creative Commons, 559 Nathan Abbott Way, Stanford, California
 94305, USA.
 *********************************************************************/
-
-#define LCL_NULLITEM 0x7FFFFFFF
-	// 2^31 -1 as a special character
 
 LCL_type * LCL_Init(float fPhi)
 {
@@ -103,7 +104,7 @@ void LCL_RebuildHash(LCL_type * lcl)
 	}
 }
 
-void Heapify(LCL_type * lcl, int ptr)
+static void Heapify(LCL_type * lcl, int ptr)
 { // restore the heap condition in case it has been violated
 	LCLCounter tmp;
 	LCLCounter * cpt, *minchild;
@@ -161,7 +162,7 @@ void Heapify(LCL_type * lcl, int ptr)
 	} 
 }
 
-LCLCounter * LCL_FindItem(LCL_type * lcl, LCLitem_t item)
+static LCLCounter * LCL_FindItem(LCL_type * lcl, LCLitem_t item)
 { // find a particular item in the date structure and return a pointer to it
 	LCLCounter * hashptr;
 	int hashval;
@@ -290,7 +291,7 @@ std::map<uint32_t, uint32_t> LCL_Output(LCL_type * lcl, int thresh)
 }
 */
 
-void LCL_CheckHash(LCL_type * lcl, int item, int hash)
+static void LCL_CheckHash(LCL_type * lcl, int item, int hash)
 { // debugging routine to validate the hash table
 	int i;
 	LCLCounter * hashptr, * prev;
@@ -309,7 +310,7 @@ void LCL_CheckHash(LCL_type * lcl, int item, int hash)
 			if (hashptr->prev!=prev)
 			{
 				printf("\n Previous violation! prev = %d, should be %d\n",
-					(int) hashptr->prev, (int) prev);
+					(int)hashptr->prev, (int)prev);
 				printf("after inserting item %d with hash %d\n",item, hash);
 				exit(EXIT_FAILURE);
 			}

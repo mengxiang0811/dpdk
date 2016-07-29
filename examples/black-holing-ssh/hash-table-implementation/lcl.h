@@ -10,6 +10,9 @@
 #define MOD 2147483647
 #define HL 31
 
+#define LCL_NULLITEM 0x7FFFFFFF
+	// 2^31 -1 as a special character
+
 // lclazy.h -- header file for Lazy Lossy Counting
 // see Manku & Motwani, VLDB 2002 for details
 // implementation by Graham Cormode, 2002,2003, 2005
@@ -59,6 +62,8 @@ typedef struct LCL_type
 #endif
 } LCL_type;
 
+long hash31(int64_t a, int64_t b, int64_t x);
+
 LCL_type * LCL_Init(float fPhi);
 void LCL_Destroy(LCL_type *);
 void LCL_Update(LCL_type *, LCLitem_t, int);
@@ -67,6 +72,9 @@ int LCL_PointEst(LCL_type *, LCLitem_t);
 int LCL_PointErr(LCL_type *, LCLitem_t);
 //std::map<uint32_t, uint32_t> LCL_Output(LCL_type *,int);
 
+int LCL_cmp( const void * a, const void * b);
+void LCL_Output(LCL_type * lcl);
+void LCL_RebuildHash(LCL_type * lcl);
 void LCL_ShowHash(LCL_type * lcl);
 void LCL_ShowHeap(LCL_type * lcl);
 
