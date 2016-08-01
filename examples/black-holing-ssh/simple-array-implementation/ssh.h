@@ -27,5 +27,6 @@ int sink_down(struct ssh_ds *ssh, int idx);
 void swap(void *a, void *b);
 void ssh_show(struct ssh_ds *ssh);
 void ssh_reset(struct ssh_ds *ssh);
+void ssh_destroy(struct ssh_ds *ssh);
 
 #endif

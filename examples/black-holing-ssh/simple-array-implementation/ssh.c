@@ -125,3 +125,9 @@ void ssh_reset(struct ssh_ds *ssh)
 {
     memset(ssh->counters, 0, sizeof(struct ssh_counter) * (ssh->size + 1));
 }
+
+void ssh_destroy(struct ssh_ds *ssh)
+{
+	free(ssh->counters);
+	free(ssh);
+}
