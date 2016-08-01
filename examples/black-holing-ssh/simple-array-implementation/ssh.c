@@ -110,7 +110,7 @@ void ssh_show(struct ssh_ds *ssh)
 
     printf("\n**************\n");
     for (i = 1; i <= ssh->size; i++) {
-        printf("%llu", ssh->counters[i].count);
+        printf("%" PRIu64 , ssh->counters[i].count);
 
         if (i == j) {
             printf("\n");
