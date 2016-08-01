@@ -32,6 +32,7 @@
  */
 
 #include <stdint.h>
+#include <unistd.h>
 #include <inttypes.h>
 
 #include <rte_eal.h>
@@ -42,6 +43,7 @@
 #include <rte_mbuf.h>
 #include <rte_ring.h>
 #include <rte_mempool.h>
+#include <rte_ip.h>
 
 #include "lcl.h"
 #include "cycles2sec.h"
@@ -70,7 +72,7 @@ static float fPhi = 0.2;
 static unsigned nb_ports;
 
 /* report period is 30 seconds */
-const static uint64_t t_report_interval = (30UL * cycles_per_sec);
+static uint64_t t_report_interval;
 static uint64_t t_app_start;
 
 static struct rte_ring *bh_counting_stat_ring;
@@ -99,6 +101,8 @@ bh_counting_init(void)
     if (bh_counting_stat_ring == NULL)
         rte_exit(EXIT_FAILURE, "Problem getting black holing stat ring\n");
 
+    t_report_interval = (30UL * cycles_per_sec);
+
     return 0;
 }
 
@@ -106,263 +110,283 @@ bh_counting_init(void)
  * Initialises a given port using global settings and with the rx buffers
  * coming from the mbuf_pool passed as parameter
  */
-    static inline int
+	static inline int
 port_init(uint8_t port, struct rte_mempool *mbuf_pool)
 {
-    struct rte_eth_conf port_conf = port_conf_default;
-    const uint16_t rx_rings = 1, tx_rings = 1;
-    int retval;
-    uint16_t q;
+	struct rte_eth_conf port_conf = port_conf_default;
+	const uint16_t rx_rings = 1, tx_rings = 1;
+	int retval;
+	uint16_t q;
 
-    if (port >= rte_eth_dev_count())
-        return -1;
+	if (port >= rte_eth_dev_count())
+		return -1;
 
-    retval = rte_eth_dev_configure(port, rx_rings, tx_rings, &port_conf);
-    if (retval != 0)
-        return retval;
+	retval = rte_eth_dev_configure(port, rx_rings, tx_rings, &port_conf);
+	if (retval != 0)
+		return retval;
 
-    for (q = 0; q < rx_rings; q++) {
-        retval = rte_eth_rx_queue_setup(port, q, RX_RING_SIZE,
-                rte_eth_dev_socket_id(port), NULL, mbuf_pool);
-        if (retval < 0)
-            return retval;
-    }
+	for (q = 0; q < rx_rings; q++) {
+		retval = rte_eth_rx_queue_setup(port, q, RX_RING_SIZE,
+				rte_eth_dev_socket_id(port), NULL, mbuf_pool);
+		if (retval < 0)
+			return retval;
+	}
 
-    for (q = 0; q < tx_rings; q++) {
-        retval = rte_eth_tx_queue_setup(port, q, TX_RING_SIZE,
-                rte_eth_dev_socket_id(port), NULL);
-        if (retval < 0)
-            return retval;
-    }
+	for (q = 0; q < tx_rings; q++) {
+		retval = rte_eth_tx_queue_setup(port, q, TX_RING_SIZE,
+				rte_eth_dev_socket_id(port), NULL);
+		if (retval < 0)
+			return retval;
+	}
 
-    retval  = rte_eth_dev_start(port);
-    if (retval < 0)
-        return retval;
+	retval  = rte_eth_dev_start(port);
+	if (retval < 0)
+		return retval;
 
-    struct ether_addr addr;
+	struct ether_addr addr;
 
-    rte_eth_macaddr_get(port, &addr);
-    printf("Port %u MAC: %02"PRIx8" %02"PRIx8" %02"PRIx8
-            " %02"PRIx8" %02"PRIx8" %02"PRIx8"\n",
-            (unsigned)port,
-            addr.addr_bytes[0], addr.addr_bytes[1],
-            addr.addr_bytes[2], addr.addr_bytes[3],
-            addr.addr_bytes[4], addr.addr_bytes[5]);
+	rte_eth_macaddr_get(port, &addr);
+	printf("Port %u MAC: %02"PRIx8" %02"PRIx8" %02"PRIx8
+			" %02"PRIx8" %02"PRIx8" %02"PRIx8"\n",
+			(unsigned)port,
+			addr.addr_bytes[0], addr.addr_bytes[1],
+			addr.addr_bytes[2], addr.addr_bytes[3],
+			addr.addr_bytes[4], addr.addr_bytes[5]);
 
-    rte_eth_promiscuous_enable(port);
+	rte_eth_promiscuous_enable(port);
 
-    return 0;
+	return 0;
 }
 
-static int
+	static int
 send_stat(unsigned int lcore_id, LCLitem_t item, int count)
 {
-    struct bh_counting_stat *stat = NULL;
-    int ret = rte_mempool_mc_get(bh_counting_stat_pool, &stat);
 
-    if (ret == -ENOENT) {
-        printf("Not enough entries in the mempool\n");
-        return -1;
-    }
+	printf("In send_stat function: lcore_id = %u, item = %u, count = %u\n", lcore_id, item, count);
+	struct bh_counting_stat *stat = NULL;
+	int ret = rte_mempool_mc_get(bh_counting_stat_pool, (void **)&stat);
 
-    stat->item = item;
-    stat->count = count;
-    stat->time = rte_rdtsc();
-    stat->lcore_id = lcore_id;
+	if (ret == -ENOENT) {
+		printf("Not enough entries in the mempool\n");
+		return -1;
+	}
 
-    ret = rte_ring_mp_enqueue(bh_counting_stat_ring, stat);
+	stat->item = item;
+	stat->count = count;
+	stat->time = rte_rdtsc();
+	stat->lcore_id = lcore_id;
 
-    if (ret == -EDQUOT) {
-        printf("RING ENQUEUE ERROR: Quota exceeded. The objects have been enqueued, but the high water mark is exceeded.\n");
-        rte_mempool_mp_put(bh_counting_stat_pool, stat);
-        return -1;
-    } else if (ret == -ENOBUFS) {
-        printf("RING ENQUEUE ERROR: Quota exceeded. Not enough room in the ring to enqueue.\n");
-        rte_mempool_mp_put(bh_counting_stat_pool, stat);
-        return -1;
-    }
-    
-    return 0;
+	ret = rte_ring_mp_enqueue(bh_counting_stat_ring, stat);
+
+	if (ret == -EDQUOT) {
+		printf("RING ENQUEUE ERROR: Quota exceeded. The objects have been enqueued, but the high water mark is exceeded.\n");
+		rte_mempool_mp_put(bh_counting_stat_pool, stat);
+		return -1;
+	} else if (ret == -ENOBUFS) {
+		printf("RING ENQUEUE ERROR: Quota exceeded. Not enough room in the ring to enqueue.\n");
+		rte_mempool_mp_put(bh_counting_stat_pool, stat);
+		return -1;
+	}
+
+	return 0;
 }
 
 /*
  * thread that does the counting work on each lcore
  */
-    static  __attribute__((noreturn)) void
-lcore_counting(void)
+	static  int
+lcore_counting(__attribute__((unused)) void *arg)
 {
-    uint8_t port;
+	uint8_t port;
 
-    int tot_traffic = 0;
-    uint64_t t_last_report = t_app_start;
+	int tot_traffic = 0;
+	uint64_t t_last_report = t_app_start;
 
-    for (port = 0; port < nb_ports; port++)
-        if (rte_eth_dev_socket_id(port) > 0 &&
-                rte_eth_dev_socket_id(port) !=
-                (int)rte_socket_id())
-            printf("WARNING, port %u is on remote NUMA node to "
-                    "polling thread.\n\tPerformance will "
-                    "not be optimal.\n", port);
+	for (port = 0; port < nb_ports; port++)
+		if (rte_eth_dev_socket_id(port) > 0 &&
+				rte_eth_dev_socket_id(port) !=
+				(int)rte_socket_id())
+			printf("WARNING, port %u is on remote NUMA node to "
+					"polling thread.\n\tPerformance will "
+					"not be optimal.\n", port);
 
-    printf("\nCore %u forwarding packets. [Ctrl+C to quit]\n",
-            rte_lcore_id());
+	printf("\nCore %u forwarding packets. [Ctrl+C to quit]\n",
+			rte_lcore_id());
 
-    LCL_type *lcl = LCL_Init(fPhi);
+	LCL_type *lcl = LCL_Init(fPhi);
 
-    for (;;) {
-        for (port = 0; port < nb_ports; port++) {
-            struct rte_mbuf *bufs[BURST_SIZE];
-            const uint16_t nb_rx = rte_eth_rx_burst(port, 0,
-                    bufs, BURST_SIZE);
-            uint16_t buf;
+	for (;;) {
+		for (port = 0; port < nb_ports; port++) {
+			struct rte_mbuf *bufs[BURST_SIZE];
+			const uint16_t nb_rx = rte_eth_rx_burst(port, 0,
+					bufs, BURST_SIZE);
+			uint16_t buf;
 
-            if (unlikely(nb_rx == 0))
-                continue;
+			if (unlikely(nb_rx == 0))
+				continue;
 
-            for (buf = 0; buf < nb_rx; buf++) {
-                struct rte_mbuf *mbuf = bufs[buf];
+			for (buf = 0; buf < nb_rx; buf++) {
+				struct rte_mbuf *mbuf = bufs[buf];
 
-                /* use the data len field to calculate as the pkt length */
+				struct ether_hdr *eth_hdr;
+				uint16_t ether_type;
+				eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
+				ether_type = eth_hdr->ether_type;
 
-                if (RTE_ETH_IS_IPV4_HDR(mbuf->packet_type)) {
-                    struct ipv4_hdr *ipv4_hdr;
-                    ipv4_hdr = rte_pktmbuf_mtod_offset(mbuf, struct ipv4_hdr *,
-                            sizeof(struct ether_hdr));
+				/* use the data len field to calculate as the pkt length */
+				if (ether_type == rte_cpu_to_be_16(ETHER_TYPE_IPv4)) {
+				//if (RTE_ETH_IS_IPV4_HDR(mbuf->packet_type)) {
+					struct ipv4_hdr *ipv4_hdr;
+					ipv4_hdr = rte_pktmbuf_mtod_offset(mbuf, struct ipv4_hdr *,
+							sizeof(struct ether_hdr));
 
-                    unsigned int len = rte_pktmbuf_data_len(mbuf);
+					unsigned int len = rte_pktmbuf_data_len(mbuf);
 
-                    tot_traffic += len;
+					tot_traffic += len;
+					
+					printf("IPv4 PKT: ---> %u, length = %d\n", ipv4_hdr->dst_addr, len);
 
-                    LCL_Update(lcl, ((struct ipv4_hdr *)ipv4_hdr)->dst_addr, len);
+					LCL_Update(lcl, ((struct ipv4_hdr *)ipv4_hdr)->dst_addr, len);
 
-                } else printf("non-IPv4 packet!\n");
-                //rte_pktmbuf_dump(stdout, mbuf, len);
-                //rte_pktmbuf_free(mbuf);
-            }
+				} else printf("non-IPv4 packet!\n");
+				//rte_pktmbuf_dump(stdout, mbuf, len);
+				//rte_pktmbuf_free(mbuf);
+			}
 
-            const uint16_t nb_tx = rte_eth_tx_burst(1, 0, bufs, nb_rx);
+			const uint16_t nb_tx = rte_eth_tx_burst(1, 0, bufs, nb_rx);
 
-            if (nb_tx < nb_rx) printf("%d packets have been dropped!\n", nb_rx - nb_tx);
-        }
+			if (nb_tx < nb_rx) printf("%d packets have been dropped!\n", nb_rx - nb_tx);
+		}
 
-        /* output the stat results to the combine lcore */
-        /* check to report the results */
-        uint64_t t_now = rte_rdtsc();
+		/* output the stat results to the combine lcore */
+		/* check to report the results */
+		uint64_t t_now = rte_rdtsc();
 
-        if (t_now - t_last_report >= t_report_interval) {
+		if (t_now - t_last_report >= t_report_interval) {
 
-            LCL_ShowHeap(lcl);
+			LCL_ShowHeap(lcl);
 
-            /* first send out the total amount of traffic */
-            send_stat(rte_lcore_id(), LCL_NULLITEM, tot_traffic);
+			/* first send out the total amount of traffic */
+			send_stat(rte_lcore_id(), LCL_NULLITEM, tot_traffic);
 
-            for (int i = 1; i <= lcl->size; ++i)
-            {
-                if (lcl->counters[i].item != LCL_NULLITEM && \
-                        lcl->counters[i].count > 0) {
-                    send_stat(rte_lcore_id(), lcl->counters[i].item,\
-                            lcl->counters[i].count);
-                }
-            }
+			int i = 1;
+			for (i = 1; i <= lcl->size; ++i)
+			{
+				if (lcl->counters[i].item != LCL_NULLITEM && \
+						lcl->counters[i].count > 0) {
+					send_stat(rte_lcore_id(), lcl->counters[i].item,\
+							lcl->counters[i].count);
+				}
+			}
 
-            LCL_Destroy(lcl);
-            lcl = LCL_Init(fPhi);
+			LCL_Destroy(lcl);
+			lcl = LCL_Init(fPhi);
 
-            tot_traffic = 0;
-            t_last_report += t_report_interval;
-        }
-    }
+			tot_traffic = 0;
+			t_last_report += t_report_interval;
+		}
+	}
 
-    if (lcl)
-        LCL_Destroy(lcl);
+	if (lcl)
+		LCL_Destroy(lcl);
+
+	return 0;
 }
 
-    static  __attribute__((noreturn)) void
-lcore_combine_stat(void)
+	static  int
+lcore_combine_stat(__attribute__((unused)) void *arg)
 {
-    int com_tot_traffic = 0;
-    uint64_t t_last_report = t_app_start;
-    struct bh_counting_stat *stat;
+	int com_tot_traffic = 0;
+	uint64_t t_last_report = t_app_start;
+	struct bh_counting_stat *stat;
 
-    printf("\nCore %u combines the results. [Ctrl+C to quit]\n",
-            rte_lcore_id());
+	printf("\nCore %u combines the results. [Ctrl+C to quit]\n",
+			rte_lcore_id());
 
-    LCL_type *lcl = LCL_Init(fPhi / 8);
+	LCL_type *lcl = LCL_Init(fPhi / 8);
 
-    while (1) {
+	while (1) {
 
-        uint64_t t_now = rte_rdtsc();
+		uint64_t t_now = rte_rdtsc();
 
-        /*
-         * enter a new report period 
-         * delay 10 seconds to do the results collection
-         * make sure all the stat results have been received from other lcores
-         * */
-        if (t_now - t_last_report >= t_report_interval + t_report_interval / 3 * cycles_per_sec) {
-            LCL_ShowHeap(lcl);
+		/*
+		 * enter a new report period 
+		 * delay 10 seconds to do the results collection
+		 * make sure all the stat results have been received from other lcores
+		 * */
+		if (t_now - t_last_report >= (t_report_interval + t_report_interval / 3)) {
+			LCL_ShowHeap(lcl);
 
-            for (int i = 1; i <= lcl->size; ++i) {
-                if (lcl->counters[i].count > fPhi * com_tot_traffic) {
-                    printf("Dest: %u has estimated %d Bytes traffic!\n", lcl->counters[i].item, lcl->counters[i].count);
-                }
-            }
+			printf("fPhi = %f, totoal traffic = %d bytes\n", fPhi, com_tot_traffic);
 
-            com_tot_traffic = 0;
-            t_last_report += t_report_interval;
-        }
+			int i = 1;
+			for (i = 1; i <= lcl->size; ++i) {
+				if (lcl->counters[i].count > fPhi * com_tot_traffic) {
+					printf("Dest: %u has estimated %d Bytes traffic!\n", lcl->counters[i].item, lcl->counters[i].count);
+				}
+			}
 
-        if (rte_ring_dequeue(bh_counting_stat_ring, &stat) < 0) {
-            usleep(5);
-            continue;
-        }
+			com_tot_traffic = 0;
+			t_last_report += t_report_interval;
+			
+			LCL_Destroy(lcl);
+			lcl = LCL_Init(fPhi / 8);
+		}
 
-        if (stat->item == LCL_NULLITEM) com_tot_traffic += stat->count;
-        else LCL_Update(lcl, stat->item, stat->count);
+		if (rte_ring_dequeue(bh_counting_stat_ring, (void **)&stat) < 0) {
+			usleep(5);
+			continue;
+		}
 
-        rte_mempool_mp_put(bh_counting_stat_pool, stat);
-    }
+		if (stat->item == LCL_NULLITEM) com_tot_traffic += stat->count;
+		else LCL_Update(lcl, stat->item, stat->count);
+
+		rte_mempool_mp_put(bh_counting_stat_pool, stat);
+	}
+
+	return 0;
 }
 
 /* Main function, does initialisation and calls the per-lcore functions */
-    int
+	int
 main(int argc, char *argv[])
 {
-    struct rte_mempool *mbuf_pool;
-    uint8_t portid;
+	struct rte_mempool *mbuf_pool;
+	uint8_t portid;
 
-    /* init EAL */
-    int ret = rte_eal_init(argc, argv);
+	/* init EAL */
+	int ret = rte_eal_init(argc, argv);
 
-    if (ret < 0)
-        rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
-    argc -= ret;
-    argv += ret;
+	if (ret < 0)
+		rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
+	argc -= ret;
+	argv += ret;
 
-    nb_ports = rte_eth_dev_count();
-    if (nb_ports < 2 || (nb_ports & 1))
-        rte_exit(EXIT_FAILURE, "Error: number of ports must be even\n");
+	nb_ports = rte_eth_dev_count();
+	if (nb_ports < 2 || (nb_ports & 1))
+		rte_exit(EXIT_FAILURE, "Error: number of ports must be even\n");
 
-    mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL",
-            NUM_MBUFS * nb_ports, MBUF_CACHE_SIZE, 0,
-            RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
-    if (mbuf_pool == NULL)
-        rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
+	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL",
+			NUM_MBUFS * nb_ports, MBUF_CACHE_SIZE, 0,
+			RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+	if (mbuf_pool == NULL)
+		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
 
-    /* initialize all ports */
-    for (portid = 0; portid < nb_ports; portid++)
-        if (port_init(portid, mbuf_pool) != 0)
-            rte_exit(EXIT_FAILURE, "Cannot init port %"PRIu8"\n",
-                    portid);
+	/* initialize all ports */
+	for (portid = 0; portid < nb_ports; portid++)
+		if (port_init(portid, mbuf_pool) != 0)
+			rte_exit(EXIT_FAILURE, "Cannot init port %"PRIu8"\n",
+					portid);
 
-    cycles_to_sec_init();
-    bh_counting_init();
-    t_app_start = rte_rdtsc();
+	cycles_to_sec_init();
+	bh_counting_init();
+	t_app_start = rte_rdtsc();
 
-    rte_eal_remote_launch(lcore_counting, NULL, 1);
+	rte_eal_remote_launch(lcore_counting, NULL, 1);
 
-    /* call lcore_combine_stat on master core only */
-    lcore_combine_stat();
+	/* call lcore_combine_stat on master core only */
+	lcore_combine_stat(NULL);
 
-    rte_eal_mp_wait_lcore();
-    return 0;
+	rte_eal_mp_wait_lcore();
+	return 0;
 }

@@ -3,16 +3,19 @@
 
 #include <stdio.h>
 #include <sys/time.h>
+#include <inttypes.h>
 
 #include <rte_cycles.h>
 
 void
 cycles_to_sec_init(void);
 
+#if 0
 static uint64_t
 time_diff_in_us(uint64_t new_tsc, uint64_t old_tsc);
 
 static double
 time_diff_in_s(uint64_t new_tsc, uint64_t old_tsc);
+#endif
 
 #endif
