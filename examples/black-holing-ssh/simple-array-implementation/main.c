@@ -2,7 +2,7 @@
 
 int main()
 {
-    struct ssh_ds *ssh = ssh_init(12);
+    struct ssh_ds *ssh = ssh_init(0.1);
 
     ssh_update(ssh, 1, 100);
     ssh_update(ssh, 2, 200);

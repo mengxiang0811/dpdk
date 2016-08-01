@@ -4,8 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
-#define NULL_ITEM 0
+#define NULL_ITEM 0x7FFFFFFF
 
 struct ssh_counter {
     uint32_t item;
@@ -18,11 +19,12 @@ struct ssh_ds {
     struct ssh_counter *counters;
 };
 
-struct ssh_ds *ssh_init(uint32_t size);
+struct ssh_ds *ssh_init(float fPhi);
 struct ssh_counter *find_item(struct ssh_ds *ssh, uint32_t item);
 int ssh_update(struct ssh_ds *ssh, uint32_t item, uint32_t value);
 int sink_down(struct ssh_ds *ssh, int idx);
 void swap(void *a, void *b);
 void ssh_show(struct ssh_ds *ssh);
+void ssh_reset(struct ssh_ds *ssh);
 
 #endif
