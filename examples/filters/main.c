@@ -56,12 +56,30 @@
 #define PKT_ACCEPT_QUEUE 0
 #define PKT_DROP_QUEUE 127
 
-static const struct rte_eth_conf port_conf_default = {
+
+struct rte_fdir_conf fdir_conf = {
+	.mode = RTE_FDIR_MODE_PERFECT,                                                 
+	.pballoc = RTE_FDIR_PBALLOC_64K,                                            
+	.status = RTE_FDIR_REPORT_STATUS,
+	.mask = {
+		.ipv4_mask = {
+			.dst_ip = 0xFFFFFFFF,
+			//.src_ip = 0xFFFFFFFF,
+			//.proto = 0xFF,
+		},
+		//.dst_port_mask = 0xFFFF,
+		.dst_port_mask = 0x0001,
+		//.src_port_mask = 0xFFFF,
+	},
+	.drop_queue = PKT_DROP_QUEUE,
+};
+
+static struct rte_eth_conf port_conf_default = {
 	.rxmode = { .max_rx_pkt_len = ETHER_MAX_LEN, },
-	.fdir_conf = {
+	/*.fdir_conf = {
 		.mode = RTE_FDIR_MODE_PERFECT,                                                 
-   		.pballoc = RTE_FDIR_PBALLOC_64K,                                            
-   		.status = RTE_FDIR_REPORT_STATUS,
+		.pballoc = RTE_FDIR_PBALLOC_64K,                                            
+		.status = RTE_FDIR_REPORT_STATUS,
 		.mask = {
 			.ipv4_mask = {
 				.dst_ip = 0xFFFFFFFF,
@@ -71,7 +89,7 @@ static const struct rte_eth_conf port_conf_default = {
 			.dst_port_mask = 0,
 		},
 		.drop_queue = PKT_DROP_QUEUE,
-	},
+	},*/
 };
 
 /* dropped packets */
@@ -84,7 +102,7 @@ static const struct rte_eth_conf port_conf_default = {
 
 #define TCP_PORT	179
 
-static inline void
+	static inline void
 fdir_filter_add(uint8_t port_id, const char *addr, enum rte_eth_fdir_behavior behavior, uint32_t soft_id)
 {
 	struct rte_eth_fdir_filter entry;
@@ -117,7 +135,9 @@ fdir_filter_add(uint8_t port_id, const char *addr, enum rte_eth_fdir_behavior be
 	entry.input.flow_type = RTE_ETH_FLOW_NONFRAG_IPV4_TCP;
 	//entry.input.flow_type = RTE_ETH_FLOW_IPV4;
 	entry.input.flow.ip4_flow.dst_ip = fdir_ip_addr;
+	//entry.input.flow.udp4_flow.src_port = rte_cpu_to_be_16(TCP_PORT);
 	//entry.input.flow.udp4_flow.dst_port = rte_cpu_to_be_16(TCP_PORT);
+	entry.input.flow.udp4_flow.dst_port = rte_cpu_to_be_16(0);
 
 	entry.input.flow_ext.is_vf = 0;
 	entry.action.behavior = behavior;
@@ -128,7 +148,7 @@ fdir_filter_add(uint8_t port_id, const char *addr, enum rte_eth_fdir_behavior be
 		entry.action.rx_queue = PKT_ACCEPT_QUEUE;
 	else
 		entry.action.rx_queue = PKT_DROP_QUEUE;
-	
+
 	entry.soft_id = soft_id;
 
 	ret = rte_eth_dev_filter_ctrl(port_id, RTE_ETH_FILTER_FDIR,
@@ -136,9 +156,18 @@ fdir_filter_add(uint8_t port_id, const char *addr, enum rte_eth_fdir_behavior be
 	if (ret < 0)
 		printf("flow director programming error: (%s)\n",
 				strerror(-ret));
+	
+	entry.soft_id = soft_id + 100;
+	entry.input.flow.udp4_flow.dst_port = rte_cpu_to_be_16(0x1);
+	ret = rte_eth_dev_filter_ctrl(port_id, RTE_ETH_FILTER_FDIR,
+			RTE_ETH_FILTER_ADD, &entry);
+	if (ret < 0)
+		printf("flow director programming error: (%s)\n",
+				strerror(-ret));
+	
 }
 
-static inline int
+	static inline int
 ntuple_filter_add(uint8_t port, const char *addr, uint8_t queue_id)
 {
 	int ret = 0;
@@ -184,6 +213,7 @@ ntuple_filter_add(uint8_t port, const char *addr, uint8_t queue_id)
 	static inline int
 port_init(uint8_t port, struct rte_mempool *mbuf_pool)
 {
+	port_conf_default.fdir_conf = fdir_conf;
 	struct rte_eth_conf port_conf = port_conf_default;
 	const uint16_t rx_rings = 1, tx_rings = 1;
 	int retval;
@@ -265,7 +295,7 @@ lcore_main(void)
 	}
 }
 
-static  __attribute__((noreturn)) void
+	static  __attribute__((noreturn)) void
 lcore_stats(void)
 {
 	uint8_t port = 0;
@@ -274,7 +304,7 @@ lcore_stats(void)
 		sleep(30);
 		nic_stats_display(port);
 		nic_xstats_display(port);
-	
+
 		printf("\n$$$$$$$$$$$$$$reset the stats$$$$$$$$$$$$$\n");
 		nic_stats_clear(port);
 		nic_xstats_clear(port);
@@ -308,12 +338,14 @@ main(int argc, char *argv[])
 				portid);
 
 	stats_mapping_setup(portid);
-	
+
 	fdir_filter_add(portid, FDIR_DROP_ADDR, RTE_ETH_FDIR_REJECT, 0);
 	fdir_filter_add(portid, FDIR_ACCEPT_ADDR, RTE_ETH_FDIR_ACCEPT, 1);
-	
+
 	ntuple_filter_add(portid, NTUPLE_DROP_ADDR, PKT_DROP_QUEUE);
 	ntuple_filter_add(portid, NTUPLE_ACCEPT_ADDR, PKT_ACCEPT_QUEUE);
+
+	fdir_get_infos(portid);
 
 	if (rte_lcore_count() > 1)
 		printf("\nWARNING: Too much enabled lcores - "

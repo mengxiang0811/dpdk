@@ -22,3 +22,6 @@ nic_xstats_display(portid_t port_id);
 
 void
 nic_xstats_clear(portid_t port_id);
+
+void
+fdir_get_infos(portid_t port_id);
